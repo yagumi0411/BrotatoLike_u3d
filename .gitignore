@@ -62,6 +62,11 @@ ExportedObj/
 *.mdb
 *.opendb
 *.VC.db
+*.slnx
+
+# ProjectSettings 自动生成
+/[Pp]roject[Ss]ettings/[Pp]ackages/
+[Pp]roject[Ss]ettings/SceneTemplateSettings.json
 
 # Unity3D generated meta files
 *.pidb.meta

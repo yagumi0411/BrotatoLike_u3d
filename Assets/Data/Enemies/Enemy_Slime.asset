@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9a8c073c018d6a84a999dd526f959717, type: 3}
+  m_Name: Enemy_Slime
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyDefinition
+  Type: 0
+  Name: "\u53F2\u83B1\u59C6"
+  BaseHP: 12
+  MoveSpeed: 2
+  ContactDamage: 1
+  BaseXP: 3
+  CollisionRadius: 0.5
+  MeshScale: 1
+  bIsRanged: 0
+  RangedAttackInterval: 2
+  ProjectileDamage: 3
+  ProjectileSpeed: 8
+  bCanDash: 0
+  DashCooldown: 3
+  DashSpeed: 12
+  DashDuration: 0.3
+  MinWaveToSpawn: 1

@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4929265315e861c449dc908883ab0d5f, type: 3}
+  m_Name: Upgrade_MaxHP_Add
+  m_EditorClassIdentifier: Assembly-CSharp::UpgradeOption
+  Type: 1
+  Name: "\u751F\u547D\u5F3A\u5316"
+  Description: "+3 \u6700\u5927\u751F\u547D\u503C"
+  Value: 3
+  WeaponDef: {fileID: 0}
+  MinLevelToAppear: 1

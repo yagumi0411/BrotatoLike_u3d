@@ -1,0 +1,233 @@
+using UnityEngine;
+using UnityEngine.InputSystem;
+using System.Collections.Generic;
+
+[RequireComponent(typeof(CharacterController))]
+public class PlayerController : MonoBehaviour
+{
+    [Header("组件")]
+    public CharacterController CharacterController;
+    public PlayerStatsComponent StatsComponent;
+    public Transform CameraTransform;
+
+    [Header("武器")]
+    public List<Weapon> EquippedWeapons = new List<Weapon>();
+    public const int MaxWeaponSlots = 6;
+
+    [Header("初始武器")]
+    public WeaponDefinition StartingWeaponPrefab;
+
+    [Header("视觉")]
+    [Tooltip("是否在启动时自动生成一个胶囊体作为玩家模型")]
+    public bool AutoCreateVisual = true;
+    public Material PlayerMaterial;
+    public Vector3 VisualScale = new Vector3(0.8f, 0.9f, 0.8f);
+
+    private Vector2 _moveInput;
+    private Vector3 _aimDirection;
+    private Camera _mainCamera;
+    private Vector3 _targetMoveDir;
+    private Vector3 _lastMoveDir;
+
+    private void Awake()
+    {
+        CharacterController = GetComponent<CharacterController>();
+        StatsComponent = GetComponent<PlayerStatsComponent>();
+    }
+
+    private void Start()
+    {
+        _mainCamera = Camera.main;
+        if (_mainCamera == null)
+        {
+            _mainCamera = FindAnyObjectByType<Camera>();
+        }
+
+        if (_mainCamera != null)
+        {
+            CameraTransform = _mainCamera.transform;
+        }
+        else
+        {
+            Debug.LogWarning("PlayerController: 未找到相机，移动将使用世界坐标方向");
+        }
+
+        if (CharacterController == null)
+        {
+            Debug.LogError("PlayerController: 未找到 CharacterController，角色无法移动");
+        }
+
+        SpawnStartingWeapon();
+        CreateSimpleVisual();
+        StatsComponent.OnDeath += OnPlayerDeath;
+    }
+
+    private void Update()
+    {
+        HandleInput();
+        UpdateMovementVector();
+        ApplyMovement();
+    }
+
+    private void HandleInput()
+    {
+        Vector2 input = Vector2.zero;
+        var keyboard = Keyboard.current;
+        if (keyboard != null)
+        {
+            if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) input.y += 1f;
+            if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) input.y -= 1f;
+            if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) input.x += 1f;
+            if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) input.x -= 1f;
+        }
+        _moveInput = input.normalized;
+
+        // 鼠标瞄准方向
+        var mouse = Mouse.current;
+        if (mouse != null && _mainCamera != null)
+        {
+            Vector2 mousePos = mouse.position.ReadValue();
+            Ray ray = _mainCamera.ScreenPointToRay(mousePos);
+            if (Physics.Raycast(ray, out RaycastHit hit, 100f, LayerMask.GetMask("Ground"), QueryTriggerInteraction.Ignore))
+            {
+                Vector3 targetPoint = hit.point;
+                targetPoint.y = transform.position.y;
+                _aimDirection = (targetPoint - transform.position).normalized;
+            }
+        }
+    }
+
+    private void UpdateMovementVector()
+    {
+        if (_moveInput.sqrMagnitude <= 0.01f)
+        {
+            _targetMoveDir = Vector3.zero;
+            return;
+        }
+
+        Vector3 forward;
+        Vector3 right;
+
+        if (CameraTransform != null)
+        {
+            forward = CameraTransform.forward;
+            forward.y = 0f;
+            forward.Normalize();
+            right = CameraTransform.right;
+            right.y = 0f;
+            right.Normalize();
+        }
+        else
+        {
+            forward = Vector3.forward;
+            right = Vector3.right;
+        }
+
+        _targetMoveDir = (forward * _moveInput.y + right * _moveInput.x).normalized;
+
+        // 检测方向突变（调试抽搐）
+        if (_lastMoveDir.sqrMagnitude > 0.01f && Vector3.Dot(_lastMoveDir, _targetMoveDir) < 0.3f)
+        {
+            Debug.LogWarning($"[PlayerController] Direction JUMP at {Time.time:F2}: {_targetMoveDir} (was {_lastMoveDir})");
+        }
+        _lastMoveDir = _targetMoveDir;
+    }
+
+    private void ApplyMovement()
+    {
+        float speed = StatsComponent != null ? StatsComponent.GetEffectiveMoveSpeed() : 6f;
+
+        if (_targetMoveDir.sqrMagnitude > 0.01f)
+        {
+            // 使用 Time.smoothDeltaTime 代替 Time.deltaTime，
+            // 消除帧率波动导致的移动步长忽大忽小（抽搐感）
+            float dt = CharacterController != null ? Time.smoothDeltaTime : Time.deltaTime;
+            Vector3 motion = _targetMoveDir * speed * dt;
+
+            if (CharacterController != null)
+            {
+                CharacterController.Move(motion);
+            }
+            else
+            {
+                transform.position += motion;
+            }
+        }
+
+        // 更新朝向
+        if (_aimDirection.sqrMagnitude > 0.01f)
+        {
+            transform.forward = _aimDirection;
+        }
+    }
+
+    public void SpawnStartingWeapon()
+    {
+        if (StartingWeaponPrefab != null)
+        {
+            AddWeapon(StartingWeaponPrefab);
+        }
+    }
+
+    private void CreateSimpleVisual()
+    {
+        if (!AutoCreateVisual) return;
+
+        if (transform.Find("PlayerVisual") != null) return;
+
+        GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        visual.name = "PlayerVisual";
+        visual.transform.SetParent(transform, false);
+        visual.transform.localPosition = Vector3.zero;
+        visual.transform.localScale = VisualScale;
+
+        Destroy(visual.GetComponent<Collider>());
+
+        if (PlayerMaterial != null)
+        {
+            visual.GetComponent<Renderer>().material = PlayerMaterial;
+        }
+    }
+
+    public bool AddWeapon(WeaponDefinition weaponDef)
+    {
+        if (IsWeaponSlotFull()) return false;
+
+        var weaponObj = new GameObject(weaponDef.Name);
+        weaponObj.transform.SetParent(transform);
+        weaponObj.transform.localPosition = Vector3.zero;
+
+        Weapon weapon = weaponObj.AddComponent(weaponDef.Type switch
+        {
+            EWeaponType.MagicBullet => typeof(MagicBulletWeapon),
+            EWeaponType.FlameThrower => typeof(FlameThrowerWeapon),
+            EWeaponType.SpellOrbit => typeof(SpellOrbitWeapon),
+            _ => typeof(MagicBulletWeapon)
+        }) as Weapon;
+
+        weapon.Initialize(this, weaponDef);
+        EquippedWeapons.Add(weapon);
+        return true;
+    }
+
+    public bool IsWeaponSlotFull() => EquippedWeapons.Count >= MaxWeaponSlots;
+    public int GetRemainingWeaponSlots() => MaxWeaponSlots - EquippedWeapons.Count;
+
+    public void ApplyUpgrade(UpgradeOption option)
+    {
+        if (option.Type == EUpgradeType.Weapon && option.WeaponDef != null)
+        {
+            AddWeapon(option.WeaponDef);
+        }
+        else
+        {
+            StatsComponent.ApplyUpgrade(option);
+        }
+    }
+
+    public void OnPlayerDeath()
+    {
+        Debug.Log($"游戏结束! 存活波次: {GameManager.Instance?.WaveManager.CurrentWave}, 等级: {StatsComponent.CurrentLevel}");
+        GameManager.Instance?.GameOver();
+    }
+}
