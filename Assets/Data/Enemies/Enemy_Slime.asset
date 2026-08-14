@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemyDefinition
   Type: 0
   Name: "\u53F2\u83B1\u59C6"
-  BaseHP: 12
+  BaseHP: 8
   MoveSpeed: 2
   ContactDamage: 1
   BaseXP: 3

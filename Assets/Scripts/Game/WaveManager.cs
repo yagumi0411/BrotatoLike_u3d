@@ -60,6 +60,6 @@ public class WaveManager : MonoBehaviour
         RestTimer = 0f;
     }
 
-    public float GetEnemyStatMultiplier() => 1f + (CurrentWave - 1) * 0.15f;
+    public float GetEnemyStatMultiplier() => Mathf.Pow(1.06f, CurrentWave - 1);
     public float GetXPWaveMultiplier() => 1f + (CurrentWave - 1) * 0.1f;
 }

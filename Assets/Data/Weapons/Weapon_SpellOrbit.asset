@@ -15,8 +15,8 @@ MonoBehaviour:
   Type: 2
   Name: 
   Description: 
-  BaseDamage: 3
-  AttackInterval: 0.3
+  BaseDamage: 2.5
+  AttackInterval: 0.4
   Range: 1.5
   TargetMode: 0
   ProjectileSpeed: 8
@@ -24,7 +24,7 @@ MonoBehaviour:
   ProjectileCount: 1
   ConeHalfAngle: 30
   OrbitCount: 3
-  OrbitRadius: 2
+  OrbitRadius: 1.5
   OrbitSpeed: 180
   ProjectileVFXPrefab: {fileID: 5686492873617707349, guid: 84ab3c894ab214c4fb385508ad6faba3, type: 3}
   MinWaveToAppear: 0

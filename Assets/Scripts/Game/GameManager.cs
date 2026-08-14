@@ -55,6 +55,10 @@ public class GameManager : MonoBehaviour
     {
         Instance = this;
 
+        // 清空上一局残留的注册表/池（防编辑器热重载与跨局残留）
+        EnemyRegistry.Clear();
+        EnemyPool.Clear();
+
         // 初始化引用
         WaveManager = FindAnyObjectByType<WaveManager>();
         MonsterSpawner = FindAnyObjectByType<MonsterSpawner>();

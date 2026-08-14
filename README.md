@@ -11,6 +11,7 @@
  ![主菜单](Screenshots/menu.png) 
  ![游戏进行中](Screenshots/gameplay.png) 
  ![升级界面](Screenshots/levelup.png) 
+ ![暂停菜单](Screenshots/stop.png) 
  ![结算界面](Screenshots/gameover.png)
 
 
@@ -23,7 +24,7 @@
 
 | 工具 | 版本 |
 |------|------|
-| Unity | 6.5(6000.5.4f1)  |
+| Unity | 6.5 (6000.5.4f1) |
 | 输入系统 | Input System Package |
 
 ### 打开项目
@@ -61,7 +62,7 @@ git clone <repo-url>
 |------|------|
 |  **3 种武器** | 魔法弹（单目标跟踪）、火焰喷射（扇形范围）、飞弹环绕（被动碰撞） |
 |  **5 种敌人** | 史莱姆、骷髅、蝙蝠、暗影法师（远程）、幽灵（冲刺） |
-|  **波次系统** | 30 秒/波 + 3 秒休息，敌人属性随波次指数增长 |
+|  **波次系统** | 20 秒/波 + 1 秒休息，敌人属性随波次指数增长 |
 |  **升级系统** | 9 种属性升级 + 新武器，算法自动生成 3 选 1 |
 |  **结算统计** | 波次、等级、击杀数、存活时间 |
 |  **暂停菜单** | 继续 / 重新开始 / 返回主菜单 |
@@ -106,9 +107,10 @@ git clone <repo-url>
 
 | 优化 | 说明 |
 |------|------|
-| **限频索敌** | `Weapon.FindTarget()` 每 0.2s 扫描一次，避免每帧 `FindObjectsByType` 的 GC 开销 |
-| **扇形 OverlapSphere** | 火焰喷射使用 `Physics.OverlapSphere` + 角度过滤，比粒子碰撞检测更可靠且零 GC 分配 |
-| **零分配检测** | `OverlapSphereNonAlloc` + 复用缓冲区，避免每帧内存分配 |
+| **敌人注册表** | 敌人出生/死亡时 O(1) 注册注销，索敌遍历注册表 + 缓存目标，替代 `FindObjectsByType` 全场景扫描，查询零 GC 分配 |
+| **对象池** | 敌人、子弹、经验球、火焰粒子四类高频对象全部池化复用，消除运行时 Instantiate/Destroy |
+| **蓄水池采样** | 随机索敌单遍均匀采样，避免收集列表分配 |
+| **平方距离比较** | 索敌/拾取用 `sqrMagnitude` 替代 `Vector3.Distance`，省去开方 |
 
 ### 项目结构
 
@@ -155,7 +157,7 @@ MainMenu ──"开始游戏"──→ Playing ──"ESC"──→ Paused
 
 | 技术 | 用途 |
 |------|------|
-| **Unity 2022.3+** | 游戏引擎 |
+| **Unity 6.5 (6000.5.4f1)** | 游戏引擎 |
 | **C#** | 全部游戏逻辑 |
 | **Input System Package** | WASD 移动 + 鼠标瞄准 |
 | **TextMeshPro** | UI 文字渲染 |
@@ -173,6 +175,8 @@ MainMenu ──"开始游戏"──→ Playing ──"ESC"──→ Paused
 - ScriptableObject 规格
 - 敌人和升级的详细数值表
 
+结构变更记录见 `Docs/CHANGELOG.md`。
+
 ---
 
 ## 面试展示亮点
@@ -181,7 +185,7 @@ MainMenu ──"开始游戏"──→ Playing ──"ESC"──→ Paused
 |------|------|
 | **数据驱动架构** | 所有游戏数值走 ScriptableObject，策划可独立调参 |
 | **Component 分离设计** | `PlayerStatsComponent` 独立负责属性，职责单一 |
-| **性能意识** | 限频扫描、OverlapSphere 零分配检测，体现对 GC 的关注 |
+| **性能意识** | 敌人注册表 + 四类对象池，高频路径零 GC 分配，体现对 GC 的关注 |
 | **完整游戏流程** | 主菜单 → 游戏 → 暂停 → 升级 → 结算 → 重新开始，闭环完整 |
 | **可扩展架构** | 抽象 Weapon 基类 + virtual 方法，新增武器只需实现 Fire() |
 | **事件驱动 UI** | 避免每帧轮询，通过事件监听数据变化 |

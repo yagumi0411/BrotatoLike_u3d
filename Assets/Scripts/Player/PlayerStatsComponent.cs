@@ -60,7 +60,7 @@ public class PlayerStatsComponent : MonoBehaviour
     public float GetEffectiveCritDamage() =>
         1.5f + CritDamageMultiplierBonus;
 
-    public float GetXPToNextLevel() => 10 * (CurrentLevel + 1);
+    public float GetXPToNextLevel() => 8 * (CurrentLevel + 1);
 
     public void AddXP(float amount)
     {

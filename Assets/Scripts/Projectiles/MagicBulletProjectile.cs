@@ -11,7 +11,7 @@ public class MagicBulletProjectile : MonoBehaviour
 
     private void Start()
     {
-        Destroy(gameObject, Lifetime);
+        // 注：寿命结束由 Update 统一管理（对象池复用后 Start 不会再次执行）
 
         // 投射物使用 Trigger 检测命中，避免推开玩家/敌人
         if (TryGetComponent<Collider>(out var col))
@@ -55,6 +55,13 @@ public class MagicBulletProjectile : MonoBehaviour
     private void Update()
     {
         transform.position += Direction * Speed * Time.deltaTime;
+
+        // 寿命倒计时（替代 Start 的 Destroy 定时器，池化复用后依然有效）
+        Lifetime -= Time.deltaTime;
+        if (Lifetime <= 0f)
+        {
+            MagicBulletWeapon.Pool.Release(gameObject);
+        }
     }
 
     public void Initialize(float damage, bool isCrit, PlayerController owner,
@@ -90,7 +97,7 @@ public class MagicBulletProjectile : MonoBehaviour
         if (other.TryGetComponent<Enemy>(out var enemy))
         {
             enemy.ReceiveDamage(Damage, IsCrit);
-            Destroy(gameObject);
+            MagicBulletWeapon.Pool.Release(gameObject);
         }
     }
 }

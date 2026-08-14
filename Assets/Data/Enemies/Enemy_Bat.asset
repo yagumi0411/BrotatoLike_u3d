@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemyDefinition
   Type: 2
   Name: 
-  BaseHP: 8
-  MoveSpeed: 5
+  BaseHP: 5
+  MoveSpeed: 4.5
   ContactDamage: 1
   BaseXP: 2
   CollisionRadius: 0.5
@@ -28,4 +28,4 @@ MonoBehaviour:
   DashCooldown: 3
   DashSpeed: 12
   DashDuration: 0.3
-  MinWaveToSpawn: 5
+  MinWaveToSpawn: 3

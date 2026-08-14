@@ -8,6 +8,25 @@ public class XPOrb : MonoBehaviour
     private Renderer _renderer;
     private Collider _collider;
 
+    // 静态对象池：消除经验球高频生成/销毁的 GC 分配
+    private static ObjectPool _pool;
+
+    private static ObjectPool Pool
+    {
+        get
+        {
+            if (_pool == null)
+                _pool = new ObjectPool(CreateOrb, "XPOrbPool");
+            return _pool;
+        }
+    }
+
+    private void OnEnable()
+    {
+        // 池化复用状态重置（SetActive(true) 时必然触发）
+        _isMagnetizing = false;
+    }
+
     private void Awake()
     {
         _renderer = GetComponent<Renderer>();
@@ -55,7 +74,7 @@ public class XPOrb : MonoBehaviour
     private void Absorb(PlayerController player)
     {
         player.StatsComponent.AddXP(ExpValue);
-        Destroy(gameObject);
+        Pool.Release(gameObject);   // 回池复用（替代 Destroy）
     }
 
     private void OnTriggerEnter(Collider other)
@@ -68,6 +87,7 @@ public class XPOrb : MonoBehaviour
 
     public static void ClearAllOrbs()
     {
+        // 仅在结算/重开时调用一次，低频扫描可接受（池内休眠实例不受影响）
         var orbs = FindObjectsByType<XPOrb>(FindObjectsSortMode.None);
         foreach (var orb in orbs)
         {
@@ -77,13 +97,20 @@ public class XPOrb : MonoBehaviour
 
     public static void Spawn(Vector3 position, float xpValue)
     {
+        GameObject orb = Pool.Get();
+        orb.transform.position = position + Vector3.up * 0.5f;
+        orb.GetComponent<XPOrb>().ExpValue = xpValue;
+        // 磁吸状态由 OnEnable 重置
+    }
+
+    /// <summary>首次创建经验球模板（之后复用池中休眠实例）</summary>
+    private static GameObject CreateOrb()
+    {
         GameObject orb = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         orb.name = "XPOrb";
-        orb.transform.position = position + Vector3.up * 0.5f;
         orb.transform.localScale = Vector3.one * 0.3f;
         orb.GetComponent<Renderer>().material.color = Color.blue;
-
-        var orbComp = orb.AddComponent<XPOrb>();
-        orbComp.ExpValue = xpValue;
+        orb.AddComponent<XPOrb>();
+        return orb;
     }
 }

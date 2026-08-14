@@ -3,7 +3,7 @@
 > **面向受众**: 程序员 & AI 实现者
 > **用途**: 面试 Demo 实现规范
 > **主题**: 魔法风格 Top-Down 无限波次生存游戏
-> **引擎**: Unity 2022.3+ (C# 实现)
+> **引擎**: Unity 6.5 (6000.5.4f1) (C# 实现)
 
 ---
 
@@ -25,7 +25,7 @@ Top-down 2.5D 动作生存游戏。玩家控制一名法师，在封闭竞技场
 
 | 层级 | 技术 |
 |------|------|
-| 引擎 | Unity 2022.3+ |
+| 引擎 | Unity 6.5 (6000.5.4f1) |
 | 语言 | C# |
 | 数据驱动 | ScriptableObject 驱动武器/敌人/升级配置 |
 | 架构模式 | Component-based ECS + OOP 混合 |
@@ -54,19 +54,19 @@ else:
 ### 2.2 经验值与升级
 
 ```csharp
-XP_ToNextLevel(CurrentLevel) = 10 * (CurrentLevel + 1)
+XP_ToNextLevel(CurrentLevel) = 8 * (CurrentLevel + 1)
 
 EffectiveXP = Enemy.BaseXP * (1.0f + Stats.ExpGainMultiplier) * WaveXPMultiplier
 ```
 
 | 当前等级 | 升到下一级所需 XP |
 |----------|-------------------|
-| 1 | 20 |
-| 2 | 30 |
-| 3 | 40 |
-| 5 | 60 |
-| 10 | 110 |
-| N | 10 × (N + 1) |
+| 1 | 16 |
+| 2 | 24 |
+| 3 | 32 |
+| 5 | 48 |
+| 10 | 88 |
+| N | 8 × (N + 1) |
 
 ```csharp
 WaveXPMultiplier = 1.0f + (WaveNumber - 1) * 0.1f
@@ -75,10 +75,10 @@ WaveXPMultiplier = 1.0f + (WaveNumber - 1) * 0.1f
 ### 2.3 波次缩放
 
 ```csharp
-WaveInterval = 30 秒
+WaveInterval = 20 秒（波次间休息 1 秒）
 
-EnemyStatMultiplier = 1.0f + (WaveNumber - 1) * 0.15f
-SpawnRate = 2.0f + WaveNumber * 0.5f  // 每秒生成怪物数
+EnemyStatMultiplier = 1.06^(WaveNumber - 1)  // 温和指数增长，前期平缓后期陡峭
+SpawnRate = 2.0f + WaveNumber * 0.4f  // 每秒生成怪物数
 WaveXPMultiplier = 1.0f + (WaveNumber - 1) * 0.1f
 ```
 
@@ -456,10 +456,10 @@ public class MagicBulletWeapon : Weapon
 
 **FindTarget 逻辑:**
 
-1. 从所有者位置获取范围内所有 `Enemy`
-2. 筛选距离 ≤ `WeaponDef.Range` 的敌人
-3. 根据 `WeaponDef.TargetMode` 选择目标
-4. Nearest: 返回距离最近的
+1. 优先复用缓存目标（存活且在射程内则直接返回，零扫描）
+2. 缓存失效时按 0.2s 限频扫描 `EnemyRegistry`（出生/死亡 O(1) 维护的活敌人表，零 GC 分配）
+3. 手写循环 + `sqrMagnitude` 筛选距离 ≤ `WeaponDef.Range` 的敌人
+4. Nearest: 返回距离最近的；Random: 蓄水池采样单遍均匀随机
 5. 无有效目标返回 `null`
 
 **Fire 逻辑:**
@@ -475,8 +475,8 @@ public class MagicBulletWeapon : Weapon
 | Type | MagicBullet |
 | Name | 魔法弹 |
 | Description | 向最近的敌人发射一枚魔法弹丸 |
-| BaseDamage | 5 |
-| AttackInterval | 1.0s |
+| BaseDamage | 7 |
+| AttackInterval | 0.6s |
 | Range | 15 |
 | TargetMode | Nearest |
 | ProjectileSpeed | 8 |
@@ -519,7 +519,7 @@ public class FlameThrowerWeapon : Weapon
 | Type | FlameThrower |
 | Name | 火焰喷射 |
 | Description | 向前方扇形范围持续喷射火焰 |
-| BaseDamage | 2 (每跳) |
+| BaseDamage | 2.5 (每跳) |
 | AttackInterval | 0.15s |
 | Range | 4 |
 | TargetMode | Nearest |
@@ -563,8 +563,8 @@ public class SpellOrbitWeapon : Weapon
 | Type | SpellOrbit |
 | Name | 飞弹环绕 |
 | Description | 召唤魔法飞弹环绕自身，碰触敌人造成伤害 |
-| BaseDamage | 3 |
-| AttackInterval | 0.3s |
+| BaseDamage | 2.5 |
+| AttackInterval | 0.4s |
 | Range | 1.5 (环绕半径) |
 | OrbitCount | 3 |
 | OrbitRadius | 1.5 |
@@ -655,7 +655,7 @@ public abstract class Enemy : MonoBehaviour
 
     // 获取实际属性
     protected float GetEffectiveHP();
-    protected float GetEffectiveMoveSpeed();
+    protected float GetEffectiveMoveSpeed();  // 移速仅受 30% 波次缩放，防止后期速度反超玩家
     protected float GetEffectiveContactDamage();
     protected float GetEffectiveXP();
 }
@@ -767,8 +767,8 @@ public class MonsterSpawner : MonoBehaviour
 public class WaveManager : MonoBehaviour
 {
     [Header("配置")]
-    public float WaveInterval = 30f;      // 每波持续时间
-    public float RestBetweenWaves = 3f;   // 波次间休息时间
+    public float WaveInterval = 20f;      // 每波持续时间
+    public float RestBetweenWaves = 1f;   // 波次间休息时间
 
     [Header("状态")]
     public int CurrentWave;
@@ -796,10 +796,10 @@ public class WaveManager : MonoBehaviour
 | 时间 | 事件 |
 |------|------|
 | 0:00 | 游戏开始，波次 1 开始 |
-| 0:30 | 波次 1 结束，休息 3 秒 |
-| 0:33 | 波次 2 开始 |
-| 1:03 | 波次 2 结束，休息 3 秒 |
-| 1:06 | 波次 3 开始 (解锁骷髅) |
+| 0:20 | 波次 1 结束，休息 1 秒 |
+| 0:21 | 波次 2 开始 (解锁骷髅) |
+| 0:41 | 波次 2 结束，休息 1 秒 |
+| 0:42 | 波次 3 开始 (解锁蝙蝠) |
 | ... | ... |
 
 ### 5.13 GameManager — 游戏管理器
@@ -917,11 +917,11 @@ public class MainHUD : MonoBehaviour
 
 | 敌人 | 波次解锁 | BaseHP | MoveSpeed | ContactDamage | BaseXP | 特点 |
 |------|---------|--------|-----------|---------------|--------|------|
-| 史莱姆 Slime | 1 | 12 | 2 | 1 | 3 | 慢速肉盾 |
-| 骷髅 Skeleton | 3 | 20 | 3.5 | 2 | 5 | 标准近战 |
-| 蝙蝠 Bat | 5 | 8 | 5 | 1 | 2 | 快速脆皮群怪 |
-| 暗影法师 ShadowMage | 7 | 15 | 0 | 0 | 8 | 远程站桩, 发射弹幕 2s/次, 弹幕伤害 3 |
-| 幽灵 Ghost | 9 | 10 | 3 | 2 | 6 | 3s 冲刺一次, 冲刺速度 12, 持续 0.3s |
+| 史莱姆 Slime | 1 | 8 | 2 | 1 | 3 | 慢速肉盾, 2 发魔法弹击杀 |
+| 骷髅 Skeleton | 2 | 14 | 3.5 | 2 | 5 | 标准近战, 2 发击杀 |
+| 蝙蝠 Bat | 3 | 5 | 4.5 | 1 | 2 | 快速脆皮群怪, 1 发击杀 |
+| 暗影法师 ShadowMage | 5 | 12 | 0 | 0 | 8 | 远程站桩, 发射弹幕 2s/次, 弹幕伤害 3 |
+| 幽灵 Ghost | 7 | 7 | 2.5 | 2 | 6 | 3s 冲刺一次, 冲刺速度 12, 持续 0.3s |
 
 ---
 
@@ -929,17 +929,17 @@ public class MainHUD : MonoBehaviour
 
 ### 7.1 数值类选项
 
-| UpgradeType | 显示名 | 描述模板 | Value 区间 | 随机逻辑 |
+| UpgradeType | 显示名 | 描述模板 | Value (固定) | 说明 |
 |-------------|--------|---------|-----------|----------|
-| MaxHP_Add | 生命强化 | +{Value} 最大生命值 | {2, 3, 4, 5} | 范围内随机取一 |
-| MaxHP_Mul | 生命增幅 | +{Value}% 最大生命值 | {10, 15, 20, 25} | 范围内随机取一 |
-| Damage_All_Mul | 伤害增幅 | +{Value}% 所有伤害 | {5, 8, 10, 15} | 范围内随机取一 |
-| AttackSpeed_All_Mul | 急速 | +{Value}% 攻击速度 | {5, 8, 10, 15} | 范围内随机取一 |
-| MoveSpeed_Add | 敏捷 | +{Value} 移动速度 | {0.3, 0.5, 0.6, 0.8} | 范围内随机取一 |
-| ExpRate_Mul | 领悟 | +{Value}% 经验获取 | {10, 15, 20, 30} | 范围内随机取一 |
-| PickupRange_Add | 磁力 | +{Value} 拾取范围 | {0.5, 0.8, 1.0, 1.5} | 范围内随机取一 |
-| CritChance_Add | 精准 | +{Value}% 暴击率 | {3, 5, 8} | 范围内随机取一 |
-| CritDamage_Mul | 致命 | +{Value}% 暴击伤害 | {15, 20, 30} | 范围内随机取一 |
+| MaxHP_Add | 生命强化 | +{Value} 最大生命值 | 3 | 每次升级固定 +3 最大生命 |
+| MaxHP_Mul | 生命增幅 | +{Value}% 最大生命值 | 15 | 每次升级固定 +15% 最大生命 |
+| Damage_All_Mul | 伤害增幅 | +{Value}% 所有伤害 | 10 | 每次升级固定 +10% 伤害 |
+| AttackSpeed_All_Mul | 急速 | +{Value}% 攻击速度 | 10 | 每次升级固定 +10% 攻速 |
+| MoveSpeed_Add | 敏捷 | +{Value} 移动速度 | 0.5 | 每次升级固定 +0.5 移速 |
+| ExpRate_Mul | 领悟 | +{Value}% 经验获取 | 15 | 每次升级固定 +15% 经验 |
+| PickupRange_Add | 磁力 | +{Value} 拾取范围 | 0.8 | 每次升级固定 +0.8 拾取范围 |
+| CritChance_Add | 精准 | +{Value}% 暴击率 | 5 | 每次升级固定 +5% 暴击率 (上限 60%) |
+| CritDamage_Mul | 致命 | +{Value}% 暴击伤害 | 20 | 每次升级固定 +20% 暴击伤害 |
 
 ### 7.2 武器选项显示
 
@@ -1041,9 +1041,9 @@ GameManager.Start()
 | 属性 | 值 |
 |------|-----|
 | 形状 | 圆形 |
-| 半径 | 30 Unity 单位 |
-| 边界 | 不可通过 (碰撞墙) |
-| 怪物生成位置 | 边界外随机点 |
+| 半径 | 20 Unity 单位（场景配置，代码默认 28） |
+| 边界 | 暂无物理边界（规划中） |
+| 怪物生成位置 | 以玩家为中心的环形带 [13, 20]（视野外保底距离 13） |
 | 玩家起始位置 | 圆心 (0, 0, 0) |
 
 ---

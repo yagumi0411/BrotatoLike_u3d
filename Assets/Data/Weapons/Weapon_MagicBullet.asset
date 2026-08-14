@@ -15,8 +15,8 @@ MonoBehaviour:
   Type: 0
   Name: 
   Description: 
-  BaseDamage: 20
-  AttackInterval: 1
+  BaseDamage: 7
+  AttackInterval: 0.6
   Range: 15
   TargetMode: 0
   ProjectileSpeed: 8

@@ -23,6 +23,9 @@ public abstract class Enemy : MonoBehaviour
         SetupCollider();
         IgnorePlayerCollision();
         CreateVisual();
+
+        // 注册进索敌注册表（替代 FindObjectsByType 全场景扫描）
+        EnemyRegistry.Register(this);
     }
 
     private void IgnorePlayerCollision()
@@ -64,9 +67,18 @@ public abstract class Enemy : MonoBehaviour
 
     protected virtual void CreateVisual()
     {
+        // 池化复用防御：已有视觉则跳过，防止重复创建
+        if (transform.Find("Visual") != null) return;
+
         // 默认视觉：简单胶囊体
         VisualHelper.CreateVisual(PrimitiveType.Capsule, transform, "Visual",
             Vector3.zero, Vector3.one * EnemyDef.MeshScale, Color.white);
+    }
+
+    protected virtual void OnDestroy()
+    {
+        // 兜底注销（清场/场景卸载真正销毁时才触发；池化回收路径由 EnemyPool.Release 处理）
+        EnemyRegistry.Unregister(this);
     }
 
     public virtual void ReceiveDamage(float damage, bool isCrit = false)
@@ -96,7 +108,8 @@ public abstract class Enemy : MonoBehaviour
         float xp = GetEffectiveXP();
         XPOrb.Spawn(transform.position, xp);
 
-        Destroy(gameObject);
+        // 回收到对象池（替代 Destroy，消除 Instantiate/Destroy 的 GC）
+        EnemyPool.Release(this);
     }
 
     protected virtual void Update()
@@ -144,7 +157,9 @@ public abstract class Enemy : MonoBehaviour
         GameManager.Instance?.Player?.transform?.position ?? Vector3.zero;
 
     protected float GetEffectiveHP() => EnemyDef.BaseHP * StatMultiplier;
-    protected float GetEffectiveMoveSpeed() => EnemyDef.MoveSpeed * StatMultiplier;
+    // 移速只受 30% 波次缩放，防止后期怪物速度反超玩家导致无法走位
+    protected float GetEffectiveMoveSpeed() =>
+        EnemyDef.MoveSpeed * (1f + (StatMultiplier - 1f) * 0.3f);
     protected float GetEffectiveContactDamage() => EnemyDef.ContactDamage * StatMultiplier;
     protected float GetEffectiveXP() => EnemyDef.BaseXP * GameManager.Instance.WaveManager.GetXPWaveMultiplier();
 }

@@ -15,7 +15,7 @@ MonoBehaviour:
   Type: 1
   Name: 
   Description: 
-  BaseDamage: 2
+  BaseDamage: 2.5
   AttackInterval: 0.15
   Range: 4
   TargetMode: 0

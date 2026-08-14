@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using System.Linq;
 
 public abstract class Weapon : MonoBehaviour
 {
@@ -35,32 +34,62 @@ public abstract class Weapon : MonoBehaviour
 
     private float _scanTimer;
     private const float SCAN_INTERVAL = 0.2f;
+    private Enemy _cachedTarget;   // 缓存目标：有效期内免扫描，失效才重新索敌
 
     protected virtual Enemy FindTarget()
     {
-        // 限频扫描，避免每帧 FindObjectsByType 产生 GC 卡顿
+        // 缓存目标仍存活且在射程内 → 直接复用，零扫描
+        if (_cachedTarget != null && IsTargetValid(_cachedTarget))
+            return _cachedTarget;
+
+        // 缓存失效才重新扫描：限频 + 注册表手写循环，零 GC 分配
         _scanTimer -= Time.deltaTime;
         if (_scanTimer > 0f) return null;
         _scanTimer = SCAN_INTERVAL;
 
-        //var enemies = FindObjectsByType<Enemy>(FindObjectsSortMode.None);
-        Enemy[] enemies = FindObjectsByType<Enemy>(FindObjectsSortMode.None);
-        var inRange = enemies.Where(e =>
-            Vector3.Distance(transform.position, e.transform.position) <= GetEffectiveRange()
-        ).ToList();
+        float rangeSqr = GetEffectiveRange() * GetEffectiveRange();
+        Vector3 origin = transform.position;
+        var enemies = EnemyRegistry.All;
 
-        if (inRange.Count == 0) return null;
+        Enemy best = null;
+        float bestDistSqr = float.MaxValue;
+        int seen = 0;
 
-        if (WeaponDef.TargetMode == ETargetMode.Nearest)
+        for (int i = 0; i < enemies.Count; i++)
         {
-            return inRange.OrderBy(e =>
-                Vector3.Distance(transform.position, e.transform.position)
-            ).First();
+            var enemy = enemies[i];
+            if (enemy == null || enemy.CurrentHP <= 0f) continue;
+
+            float distSqr = (enemy.transform.position - origin).sqrMagnitude;
+            if (distSqr > rangeSqr) continue;
+
+            if (WeaponDef.TargetMode == ETargetMode.Nearest)
+            {
+                if (distSqr < bestDistSqr)
+                {
+                    bestDistSqr = distSqr;
+                    best = enemy;
+                }
+            }
+            else
+            {
+                // Random 模式：蓄水池采样，单遍均匀随机，避免收集列表分配
+                seen++;
+                if (Random.Range(0, seen) == 0)
+                    best = enemy;
+            }
         }
-        else
-        {
-            return inRange[Random.Range(0, inRange.Count)];
-        }
+
+        _cachedTarget = best;
+        return best;
+    }
+
+    /// <summary>缓存目标有效性：仍存活且在射程内</summary>
+    private bool IsTargetValid(Enemy target)
+    {
+        if (target.CurrentHP <= 0f) return false;
+        Vector3 offset = target.transform.position - transform.position;
+        return offset.sqrMagnitude <= GetEffectiveRange() * GetEffectiveRange();
     }
 
     protected abstract void Fire(Enemy target);

@@ -970,8 +970,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: adc61bd52557a4a4394315c906d54d0d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WaveManager
-  WaveInterval: 30
-  RestBetweenWaves: 3
+  WaveInterval: 20
+  RestBetweenWaves: 1
 --- !u!1 &254981282
 GameObject:
   m_ObjectHideFlags: 0
@@ -1428,8 +1428,8 @@ Transform:
   m_GameObject: {fileID: 309546999}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1.8009, y: -0, z: -0.31159}
-  m_LocalScale: {x: 30, y: 1, z: 30}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 50, y: 1, z: 50}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -1522,7 +1522,7 @@ Transform:
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
   m_LocalRotation: {x: 0.5, y: 0, z: 0, w: 0.8660254}
-  m_LocalPosition: {x: 0, y: 62.1, z: -39.3}
+  m_LocalPosition: {x: 0, y: 16.15, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2309,7 +2309,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d9a97574b021cdb4aa2bf5d2d3aef7ca, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MonsterSpawner
-  ArenaRadius: 50
+  ArenaRadius: 40
+  MinSpawnDistance: 13
   EnemyPrefabs:
   - {fileID: 11400000, guid: 23d3da55fc46ad94c9dbc28180c8eba9, type: 2}
   - {fileID: 11400000, guid: ccaa417cc84898244a4c676c2ba5dd31, type: 2}
@@ -6213,7 +6214,7 @@ Transform:
   m_GameObject: {fileID: 1594202565}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -3.93418, y: 1.15, z: -20.93}
+  m_LocalPosition: {x: 0, y: 1.15, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

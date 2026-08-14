@@ -10,6 +10,33 @@ public class FlameThrowerWeapon : Weapon
     public float ParticleLifetime = 0.6f;
     public float SpreadAngle = 5f;
 
+    // 静态粒子池：火焰视觉粒子约 40 颗/秒，必须池化避免高频 Instantiate
+    private static ObjectPool _particlePool;
+
+    public static ObjectPool ParticlePool
+    {
+        get
+        {
+            if (_particlePool == null)
+                _particlePool = new ObjectPool(CreateParticle, "FlameParticlePool");
+            return _particlePool;
+        }
+    }
+
+    public static void ReleaseParticle(GameObject particle) => ParticlePool.Release(particle);
+
+    /// <summary>首次创建火焰粒子模板（之后复用池中休眠实例）</summary>
+    private static GameObject CreateParticle()
+    {
+        GameObject particle = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        particle.name = "FlameParticle";
+        particle.transform.localScale = Vector3.one * 0.15f;
+        if (particle.TryGetComponent<Collider>(out var col))
+            Object.Destroy(col);
+        particle.AddComponent<FlameProjectile>();
+        return particle;
+    }
+
     // 扇形伤害检测
     private float _damageTickTimer;
     private Dictionary<Enemy, float> _lastDamageTimeMap = new Dictionary<Enemy, float>();
@@ -62,11 +89,11 @@ public class FlameThrowerWeapon : Weapon
             _lastDamageTimeMap[enemy] = Time.time;
         }
 
-        // 清理已销毁的敌人引用
+        // 清理已销毁或已回收的敌人引用（对象池回收后引用不为 null，需检查 activeSelf）
         List<Enemy> toRemove = null;
         foreach (var kvp in _lastDamageTimeMap)
         {
-            if (kvp.Key == null)
+            if (kvp.Key == null || !kvp.Key.isActiveAndEnabled)
             {
                 toRemove ??= new List<Enemy>();
                 toRemove.Add(kvp.Key);
@@ -101,22 +128,14 @@ public class FlameThrowerWeapon : Weapon
             float spreadY = Random.Range(-SpreadAngle, SpreadAngle);
             Vector3 dir = Quaternion.Euler(spreadY, spreadX, 0f) * baseDir;
 
-            GameObject particle;
-            if (useVFX)
-            {
-                particle = new GameObject("FlameParticle_VFX");
-            }
-            else
-            {
-                particle = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                particle.name = "FlameParticle";
-                particle.transform.localScale = Vector3.one * 0.15f;
-                if (particle.TryGetComponent<Collider>(out var col))
-                    Object.Destroy(col);
-            }
+            GameObject particle = useVFX
+                ? new GameObject("FlameParticle_VFX")   // VFX 分支低频，不池化
+                : ParticlePool.Get();
             particle.transform.position = transform.position + Vector3.up * 0.5f;
 
-            var proj = particle.AddComponent<FlameProjectile>();
+            var proj = particle.GetComponent<FlameProjectile>();
+            if (proj == null)
+                proj = particle.AddComponent<FlameProjectile>();
             proj.Initialize(dir, ParticleSpeed, ParticleLifetime, useVFX ? WeaponDef.ProjectileVFXPrefab : null);
         }
     }
@@ -129,20 +148,28 @@ public class FlameProjectile : MonoBehaviour
 {
     private Vector3 _direction;
     private float _speed;
+    private float _lifetime;
     private GameObject _vfxPrefab;
 
     public void Initialize(Vector3 direction, float speed, float lifetime, GameObject vfxPrefab = null)
     {
         _direction = direction.normalized;
         _speed = speed;
+        _lifetime = lifetime;
         _vfxPrefab = vfxPrefab;
 
         CreateVisual();
-        Destroy(gameObject, lifetime);
+
+        // VFX 分支不池化：一次性定时销毁
+        if (_vfxPrefab != null)
+            Destroy(gameObject, lifetime);
     }
 
     private void CreateVisual()
     {
+        // 池化复用防御：已有视觉子物体则跳过
+        if (transform.childCount > 0) return;
+
         if (_vfxPrefab != null)
         {
             var vfx = Instantiate(_vfxPrefab, transform);
@@ -166,5 +193,12 @@ public class FlameProjectile : MonoBehaviour
     {
         // 纯视觉飞行，不检测伤害
         transform.position += _direction * _speed * Time.deltaTime;
+
+        // 池化寿命管理（VFX 分支由 Initialize 的 Destroy 定时销毁）
+        _lifetime -= Time.deltaTime;
+        if (_lifetime <= 0f)
+        {
+            FlameThrowerWeapon.ReleaseParticle(gameObject);
+        }
     }
 }
