@@ -24,16 +24,35 @@ public class PlayerStatsComponent : MonoBehaviour
     public float CurrentXP;
     public int CurrentLevel = 1;
 
+    [Header("升级无敌（双人升级不暂停玩法）")]
+    public bool IsInvincible { get; private set; }
+    private float _invincibleRemaining;
+    public const float LevelUpInvincibleDuration = 3f;
+
     // 事件
     public event Action<float, float> OnHPChanged;
     public event Action<float, float, int> OnXPChanged;
-    public event Action OnLevelUp;
+    public event Action<PlayerStatsComponent> OnLevelUp;
     public event Action OnDeath;
 
     private void Start()
     {
         CurrentHP = GetEffectiveMaxHP();
         OnHPChanged?.Invoke(CurrentHP, GetEffectiveMaxHP());
+    }
+
+    private void Update()
+    {
+        // 无敌计时（升级触发 3 秒，到期自动解除）
+        if (_invincibleRemaining > 0f)
+        {
+            _invincibleRemaining -= Time.deltaTime;
+            if (_invincibleRemaining <= 0f)
+            {
+                _invincibleRemaining = 0f;
+                IsInvincible = false;
+            }
+        }
     }
 
     public float GetEffectiveMaxHP() =>
@@ -72,14 +91,23 @@ public class PlayerStatsComponent : MonoBehaviour
         {
             CurrentXP -= GetXPToNextLevel();
             CurrentLevel++;
-            OnLevelUp?.Invoke();
+            OnLevelUp?.Invoke(this);
         }
 
         OnXPChanged?.Invoke(CurrentXP, GetXPToNextLevel(), CurrentLevel);
     }
 
+    /// <summary>进入升级状态：短暂无敌（供双人"升级不暂停"玩法）</summary>
+    public void BeginLevelUpState()
+    {
+        IsInvincible = true;
+        _invincibleRemaining = LevelUpInvincibleDuration;
+    }
+
     public void TakeDamage(float damage)
     {
+        if (IsInvincible) return;
+
         CurrentHP -= damage;
         OnHPChanged?.Invoke(CurrentHP, GetEffectiveMaxHP());
 

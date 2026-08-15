@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 using System.Collections.Generic;
 
 [RequireComponent(typeof(CharacterController))]
@@ -23,6 +22,17 @@ public class PlayerController : MonoBehaviour
     public Material PlayerMaterial;
     public Vector3 VisualScale = new Vector3(0.8f, 0.9f, 0.8f);
 
+    [Header("输入")]
+    [Tooltip("输入源：键盘鼠标 / 方向键 / 网络输入。为空时自动挂载键盘鼠标")]
+    public IInputProvider InputProvider;
+
+    /// <summary>升级中：暂停自身输入与武器攻击（双人"升级不暂停"玩法）</summary>
+    public bool IsChoosingUpgrade { get; set; }
+
+    /// <summary>本局出生点（重新开始时回到这里）</summary>
+    public Vector3 SpawnPosition;
+    public Vector3 SpawnRotation;
+
     private Vector2 _moveInput;
     private Vector3 _aimDirection;
     private Camera _mainCamera;
@@ -33,6 +43,8 @@ public class PlayerController : MonoBehaviour
     {
         CharacterController = GetComponent<CharacterController>();
         StatsComponent = GetComponent<PlayerStatsComponent>();
+        SpawnPosition = transform.position;
+        SpawnRotation = transform.eulerAngles;
     }
 
     private void Start()
@@ -57,6 +69,13 @@ public class PlayerController : MonoBehaviour
             Debug.LogError("PlayerController: 未找到 CharacterController，角色无法移动");
         }
 
+        // 无输入源时默认键盘鼠标（场景玩家零配置）
+        if (InputProvider == null)
+            InputProvider = gameObject.AddComponent<KeyboardMouseInputProvider>();
+
+        // 注册到 GameManager（多玩家支持，幂等）
+        GameManager.Instance?.RegisterPlayer(this);
+
         SpawnStartingWeapon();
         CreateSimpleVisual();
         StatsComponent.OnDeath += OnPlayerDeath;
@@ -64,6 +83,9 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
+        // 升级中：暂停操作（不移动、不转向），武器由 Weapon 自行停火
+        if (IsChoosingUpgrade) return;
+
         HandleInput();
         UpdateMovementVector();
         ApplyMovement();
@@ -71,30 +93,15 @@ public class PlayerController : MonoBehaviour
 
     private void HandleInput()
     {
-        Vector2 input = Vector2.zero;
-        var keyboard = Keyboard.current;
-        if (keyboard != null)
-        {
-            if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) input.y += 1f;
-            if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) input.y -= 1f;
-            if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) input.x += 1f;
-            if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) input.x -= 1f;
-        }
-        _moveInput = input.normalized;
+        if (InputProvider == null) return;
 
-        // 鼠标瞄准方向
-        var mouse = Mouse.current;
-        if (mouse != null && _mainCamera != null)
-        {
-            Vector2 mousePos = mouse.position.ReadValue();
-            Ray ray = _mainCamera.ScreenPointToRay(mousePos);
-            if (Physics.Raycast(ray, out RaycastHit hit, 100f, LayerMask.GetMask("Ground"), QueryTriggerInteraction.Ignore))
-            {
-                Vector3 targetPoint = hit.point;
-                targetPoint.y = transform.position.y;
-                _aimDirection = (targetPoint - transform.position).normalized;
-            }
-        }
+        _moveInput = InputProvider.MoveInput;
+
+        // 输入源提供 XZ 平面瞄准方向（鼠标或移动方向），转为世界朝向
+        Vector2 aim2D = InputProvider.AimDirection;
+        _aimDirection = aim2D.sqrMagnitude > 0.01f
+            ? new Vector3(aim2D.x, 0f, aim2D.y).normalized
+            : Vector3.zero;
     }
 
     private void UpdateMovementVector()

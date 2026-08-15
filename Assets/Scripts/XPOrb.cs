@@ -47,7 +47,8 @@ public class XPOrb : MonoBehaviour
 
     private void Update()
     {
-        var player = GameManager.Instance?.Player;
+        // 双人模式：磁吸离得最近的玩家
+        var player = GameManager.Instance?.GetNearestPlayer(transform.position);
         if (player == null) return;
 
         float dist = Vector3.Distance(transform.position, player.transform.position);
@@ -88,7 +89,7 @@ public class XPOrb : MonoBehaviour
     public static void ClearAllOrbs()
     {
         // 仅在结算/重开时调用一次，低频扫描可接受（池内休眠实例不受影响）
-        var orbs = FindObjectsByType<XPOrb>(FindObjectsSortMode.None);
+        var orbs = FindObjectsByType<XPOrb>();
         foreach (var orb in orbs)
         {
             Destroy(orb.gameObject);

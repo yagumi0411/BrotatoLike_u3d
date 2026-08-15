@@ -22,7 +22,24 @@ public class GameManager : MonoBehaviour
     // === 管理器引用 ===
     public WaveManager WaveManager { get; private set; }
     public MonsterSpawner MonsterSpawner { get; private set; }
-    public PlayerController Player { get; private set; }
+
+    // === 玩家 ===
+    /// <summary>当前局内的所有玩家（单机=1，同屏双人=2，联机=按连接数）</summary>
+    public List<PlayerController> Players = new List<PlayerController>();
+
+    /// <summary>主玩家（玩家 1）：保留旧 API，兼容 HUD/相机/结算等单玩家引用</summary>
+    public PlayerController Player => Players.Count > 0 ? Players[0] : null;
+
+    public enum EGameMode
+    {
+        Single,      // 单人模式
+        LocalCoop,   // 本地同屏双人
+        Online       // 联机双人（阶段 2 实现）
+    }
+
+    [Header("游戏模式")]
+    public EGameMode GameMode = EGameMode.LocalCoop;
+    public Material Player2Material;
 
     // === UI 组件（由你在 Inspector 中拖拽） ===
     [Header("UI 组件")]
@@ -48,8 +65,6 @@ public class GameManager : MonoBehaviour
 
     // === 内部 ===
     private int _selectedMapIndex;
-    private Vector3 _playerStartPosition;
-    private Vector3 _playerStartRotation;
 
     private void Awake()
     {
@@ -62,28 +77,27 @@ public class GameManager : MonoBehaviour
         // 初始化引用
         WaveManager = FindAnyObjectByType<WaveManager>();
         MonsterSpawner = FindAnyObjectByType<MonsterSpawner>();
-        Player = FindAnyObjectByType<PlayerController>();
 
-        // 记录玩家的初始位置（用于重新开始）
-        if (Player != null)
-        {
-            _playerStartPosition = Player.transform.position;
-            _playerStartRotation = Player.transform.eulerAngles;
-        }
+        // 注册场景内已有玩家（重复注册幂等）
+        RegisterPlayer(FindAnyObjectByType<PlayerController>());
 
         // 对 MainHUD 和 LevelUpUI 使用容错查找
         if (MainHUD == null)
             MainHUD = FindAnyObjectByType<MainHUD>();
         if (LevelUpUI == null)
             LevelUpUI = FindAnyObjectByType<LevelUpUI>();
+
+        // 按当前模式生成玩家 2（仅本地双人模式）
+        EnsureLocalPlayerTwo();
     }
 
     private void OnDestroy()
     {
         // 解除事件绑定，防止泄漏
-        if (Player != null)
+        foreach (var player in Players)
         {
-            Player.StatsComponent.OnLevelUp -= OnPlayerLevelUp;
+            if (player != null && player.StatsComponent != null)
+                player.StatsComponent.OnLevelUp -= OnPlayerLevelUp;
         }
     }
 
@@ -91,12 +105,6 @@ public class GameManager : MonoBehaviour
     {
         // 默认进入主菜单
         SetState(EGameState.MainMenu);
-
-        // 绑定升级事件
-        if (Player != null)
-        {
-            Player.StatsComponent.OnLevelUp += OnPlayerLevelUp;
-        }
     }
 
     private void Update()
@@ -127,6 +135,13 @@ public class GameManager : MonoBehaviour
     {
         CurrentState = newState;
 
+        // 结算/主菜单时强制关闭升级面板（双人模式下另一玩家可能正处于升级中，
+        // 若其阵亡结算，升级 UI 会残留；EndLevelUp 同时恢复该玩家的操作状态）
+        if (newState == EGameState.GameOver || newState == EGameState.MainMenu)
+        {
+            LevelUpUI?.EndLevelUp();
+        }
+
         // 管理所有 UI 显隐
         if (MainMenuUI != null)
             MainMenuUI.gameObject.SetActive(newState == EGameState.MainMenu);
@@ -143,8 +158,8 @@ public class GameManager : MonoBehaviour
         if (GameOverUI != null)
             GameOverUI.gameObject.SetActive(newState == EGameState.GameOver);
 
-        // 时间缩放
-        if (newState == EGameState.MainMenu || newState == EGameState.Paused || newState == EGameState.LevelUp || newState == EGameState.GameOver)
+        // 时间缩放（升级不再全局暂停：双人"升级不暂停"，升级者本人短暂无敌由 PlayerStatsComponent 管理）
+        if (newState == EGameState.MainMenu || newState == EGameState.Paused || newState == EGameState.GameOver)
         {
             Time.timeScale = 0f;
         }
@@ -154,6 +169,98 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // === 玩家注册与生成 ===
+
+    /// <summary>注册玩家（幂等）：加入列表并绑定升级事件</summary>
+    public void RegisterPlayer(PlayerController player)
+    {
+        if (player == null || Players.Contains(player)) return;
+
+        Players.Add(player);
+        if (player.StatsComponent != null)
+            player.StatsComponent.OnLevelUp += OnPlayerLevelUp;
+    }
+
+    /// <summary>取距离指定位置最近的玩家</summary>
+    public PlayerController GetNearestPlayer(Vector3 position)
+    {
+        PlayerController best = null;
+        float bestSqr = float.MaxValue;
+        foreach (var player in Players)
+        {
+            // 跳过未激活玩家（单人模式下玩家 2 停用，不能被索敌/磁吸）
+            if (player == null || !player.gameObject.activeInHierarchy) continue;
+            float distSqr = (player.transform.position - position).sqrMagnitude;
+            if (distSqr < bestSqr)
+            {
+                bestSqr = distSqr;
+                best = player;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>切换游戏模式（主菜单模式按钮调用），即时调整玩家激活状态</summary>
+    public void SetGameMode(EGameMode mode)
+    {
+        GameMode = mode;
+        ApplyGameMode();
+    }
+
+    private void ApplyGameMode()
+    {
+        bool coop = GameMode == EGameMode.LocalCoop;
+        if (coop)
+        {
+            EnsureLocalPlayerTwo();   // 需要时生成玩家 2（仅一次，之后复用）
+        }
+
+        // 玩家 1 恒激活；玩家 2 仅本地双人激活（联机模式阶段 2 按连接数生成）
+        for (int i = 1; i < Players.Count; i++)
+        {
+            if (Players[i] != null)
+                Players[i].gameObject.SetActive(coop);
+        }
+    }
+
+    /// <summary>同屏双人：克隆玩家 1 生成玩家 2（方向键输入 + 头顶血条 + 材质区分）</summary>
+    private void EnsureLocalPlayerTwo()
+    {
+        if (GameMode != EGameMode.LocalCoop || Players.Count == 0 || Players.Count >= 2) return;
+
+        var p1 = Players[0];
+        var p2 = Instantiate(p1.gameObject);
+        p2.name = "Player2";
+
+        var p2Controller = p2.GetComponent<PlayerController>();
+        if (p2Controller == null)
+        {
+            Destroy(p2);
+            return;
+        }
+
+        // 出生在玩家 1 右侧，避免重叠
+        Vector3 spawnPos = p1.SpawnPosition + new Vector3(3f, 0f, 0f);
+        p2.transform.position = spawnPos;
+        p2Controller.SpawnPosition = spawnPos;
+        p2Controller.SpawnRotation = p1.SpawnRotation;
+
+        // 输入源换为方向键（克隆会复制玩家 1 的输入组件，覆盖引用即可）
+        var arrows = p2.AddComponent<ArrowsInputProvider>();
+        p2Controller.InputProvider = arrows;
+
+        // 视觉区分（换玩家 2 材质）
+        var visual = p2.transform.Find("PlayerVisual");
+        if (visual != null && Player2Material != null)
+            visual.GetComponent<Renderer>().material = Player2Material;
+
+        // 玩家 2 无 HUD 面板，挂头顶血条
+        p2.AddComponent<PlayerStatusBar>();
+
+        // 注册（入列表 + 绑定升级事件）
+        RegisterPlayer(p2Controller);
+    }
+
     // === 公共 API ===
 
     /// <summary>
@@ -161,6 +268,15 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void StartGame()
     {
+        // 联机模式尚未实现（阶段 2），临时回退为本地双人，保证入口可玩
+        if (GameMode == EGameMode.Online)
+        {
+            Debug.LogWarning("[GameManager] 联机模式未完成，本次以本地双人模式开始");
+            GameMode = EGameMode.LocalCoop;
+        }
+
+        // 先按模式调整玩家激活状态，再统一重置
+        ApplyGameMode();
         ResetPlayer();
         ResetGameState();
         SetState(EGameState.Playing);
@@ -225,37 +341,29 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 玩家升级时调用（绑定在 PlayerStatsComponent.OnLevelUp）
+    /// 玩家升级时调用（绑定在 PlayerStatsComponent.OnLevelUp，双人模式下只影响升级者本人）
     /// </summary>
-    public void OnPlayerLevelUp()
+    public void OnPlayerLevelUp(PlayerStatsComponent stats)
     {
-        Debug.Log($"[GameManager] OnPlayerLevelUp called, Level={Player?.StatsComponent.CurrentLevel}, LevelUpUI={(LevelUpUI != null ? "OK" : "NULL")}");
+        var player = Players.Find(p => p != null && p.StatsComponent == stats);
+        if (player == null) return;
 
-        if (LevelUpUI != null)
+        // 面板复用：若另一玩家正在升级，先结束其升级状态
+        LevelUpUI?.EndLevelUp();
+
+        int remainingSlots = player.GetRemainingWeaponSlots();
+        var options = GenerateUpgradeOptions(player, 3, remainingSlots);
+
+        if (options.Count > 0)
         {
-            int remainingSlots = Player != null ? Player.GetRemainingWeaponSlots() : 0;
-            var options = GenerateUpgradeOptions(3, remainingSlots);
-            Debug.Log($"[GameManager] Generated {options.Count} options (UpgradeOptionPool has {UpgradeOptionPool?.Count ?? 0} items)");
-
-            if (options.Count > 0)
-            {
-                LevelUpUI.ShowOptions(options);
-                SetState(EGameState.LevelUp);
-                Debug.Log($"[GameManager] SetState LevelUp, timeScale={Time.timeScale}");
-            }
-            else
-            {
-                Debug.LogWarning("[GameManager] 没有可用的升级选项，跳过升级");
-            }
+            player.IsChoosingUpgrade = true;    // 暂停本人操作（移动/转向/武器）
+            stats.BeginLevelUpState();          // 3 秒无敌（升级期间保命）
+            LevelUpUI?.ShowOptions(player, options);
         }
-    }
-
-    /// <summary>
-    /// 升级选项被选择后回调（由 LevelUpUI 调用，或由升级 UI 内部处理）
-    /// </summary>
-    public void OnUpgradeSelected()
-    {
-        ResumeGame();
+        else
+        {
+            Debug.LogWarning("[GameManager] 没有可用的升级选项，跳过升级");
+        }
     }
 
     /// <summary>
@@ -267,22 +375,22 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 升级选项生成算法
+    /// 升级选项生成算法（联机阶段改由服务器生成后广播，此处保留单机逻辑）
     /// </summary>
-    public List<UpgradeOption> GenerateUpgradeOptions(int count, int remainingWeaponSlots)
+    public List<UpgradeOption> GenerateUpgradeOptions(PlayerController player, int count, int remainingWeaponSlots)
     {
         count = Mathf.Max(count, 1);
         var result = new List<UpgradeOption>();
 
         // 1. 筛选可用的数值升级选项
-        int playerLevel = Player != null ? Player.StatsComponent.CurrentLevel : 1;
+        int playerLevel = player != null ? player.StatsComponent.CurrentLevel : 1;
         var statUpgrades = UpgradeOptionPool?
             .Where(o => o.Type != EUpgradeType.Weapon && o.MinLevelToAppear <= playerLevel)
             .ToList() ?? new List<UpgradeOption>();
 
         // 2. 筛选可用的武器升级选项
         int currentWave = WaveManager?.CurrentWave ?? 1;
-        var equippedTypes = Player?.EquippedWeapons
+        var equippedTypes = player?.EquippedWeapons
             .Select(w => w.WeaponDef.Type)
             .ToHashSet() ?? new HashSet<EWeaponType>();
 
@@ -348,7 +456,7 @@ public class GameManager : MonoBehaviour
         XPOrb.ClearAllOrbs();
 
         // 清除所有敌人弹幕
-        var enemyProjectiles = FindObjectsByType<EnemyProjectile>(FindObjectsSortMode.None);
+        var enemyProjectiles = FindObjectsByType<EnemyProjectile>();
         foreach (var proj in enemyProjectiles)
         {
             Destroy(proj.gameObject);
@@ -361,31 +469,43 @@ public class GameManager : MonoBehaviour
 
     private void ResetPlayer()
     {
-        if (Player == null) return;
+        // 双人模式：所有玩家一同重置
+        foreach (var player in Players)
+        {
+            ResetSinglePlayer(player);
+        }
+    }
+
+    private void ResetSinglePlayer(PlayerController player)
+    {
+        if (player == null || !player.gameObject.activeInHierarchy) return;
+
+        // 退出升级状态（若上一局结束时仍在升级）
+        player.IsChoosingUpgrade = false;
 
         // 清除所有武器
-        foreach (var weapon in Player.EquippedWeapons)
+        foreach (var weapon in player.EquippedWeapons)
         {
             if (weapon != null)
                 Destroy(weapon.gameObject);
         }
-        Player.EquippedWeapons.Clear();
+        player.EquippedWeapons.Clear();
 
         // 重置位置
-        Player.transform.position = _playerStartPosition;
-        Player.transform.eulerAngles = _playerStartRotation;
+        player.transform.position = player.SpawnPosition;
+        player.transform.eulerAngles = player.SpawnRotation;
 
         // 如果使用 CharacterController，需要手动重置
-        var cc = Player.CharacterController;
+        var cc = player.CharacterController;
         if (cc != null)
         {
             cc.enabled = false;
-            cc.transform.position = _playerStartPosition;
+            cc.transform.position = player.SpawnPosition;
             cc.enabled = true;
         }
 
         // 重置属性
-        var stats = Player.StatsComponent;
+        var stats = player.StatsComponent;
         stats.FlatHPBonus = 0f;
         stats.PercentHPBonus = 0f;
         stats.GlobalDamageMultiplier = 0f;
@@ -400,6 +520,6 @@ public class GameManager : MonoBehaviour
         stats.CurrentHP = stats.GetEffectiveMaxHP();
 
         // 重新生成初始武器
-        Player.SpawnStartingWeapon();
+        player.SpawnStartingWeapon();
     }
 }

@@ -66,6 +66,6 @@ public class GhostEnemy : Enemy
     {
         _isDashing = true;
         _dashDuration = EnemyDef.DashDuration;
-        _dashDirection = (GetPlayerLocation() - transform.position).normalized;
+        _dashDirection = (GetTargetLocation() - transform.position).normalized;
     }
 }

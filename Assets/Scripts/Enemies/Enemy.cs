@@ -19,7 +19,8 @@ public abstract class Enemy : MonoBehaviour
         EnemyDef = def;
         StatMultiplier = statMultiplier;
         CurrentHP = GetEffectiveHP();
-        OwnerPlayer = GameManager.Instance?.Player;
+        // 双人模式：锁定离生成点最近的玩家为目标（各打各的，不会全追一个人）
+        OwnerPlayer = GameManager.Instance?.GetNearestPlayer(transform.position);
         SetupCollider();
         IgnorePlayerCollision();
         CreateVisual();
@@ -30,11 +31,19 @@ public abstract class Enemy : MonoBehaviour
 
     private void IgnorePlayerCollision()
     {
-        if (OwnerPlayer == null || _collider == null) return;
-        var playerCollider = OwnerPlayer.GetComponent<CharacterController>();
-        if (playerCollider != null)
+        // 忽略与所有玩家的物理碰撞（双人模式下两个玩家都不可被推挤）
+        if (_collider == null) return;
+        var players = GameManager.Instance?.Players;
+        if (players == null) return;
+
+        foreach (var player in players)
         {
-            Physics.IgnoreCollision(_collider, playerCollider, true);
+            if (player == null) continue;
+            var playerCollider = player.GetComponent<CharacterController>();
+            if (playerCollider != null)
+            {
+                Physics.IgnoreCollision(_collider, playerCollider, true);
+            }
         }
     }
 
@@ -122,7 +131,7 @@ public abstract class Enemy : MonoBehaviour
     {
         if (EnemyDef.MoveSpeed <= 0) return; // 不移动 (ShadowMage)
 
-        Vector3 playerPos = GetPlayerLocation();
+        Vector3 playerPos = GetTargetLocation();
         Vector3 dir = (playerPos - transform.position).normalized;
         float speed = GetEffectiveMoveSpeed();
 
@@ -153,8 +162,9 @@ public abstract class Enemy : MonoBehaviour
         }
     }
 
-    protected Vector3 GetPlayerLocation() =>
-        GameManager.Instance?.Player?.transform?.position ?? Vector3.zero;
+    /// <summary>移动目标：锁定玩家的位置（双人模式下各追各的目标）</summary>
+    protected Vector3 GetTargetLocation() =>
+        OwnerPlayer != null ? OwnerPlayer.transform.position : Vector3.zero;
 
     protected float GetEffectiveHP() => EnemyDef.BaseHP * StatMultiplier;
     // 移速只受 30% 波次缩放，防止后期怪物速度反超玩家导致无法走位

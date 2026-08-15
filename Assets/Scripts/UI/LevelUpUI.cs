@@ -14,6 +14,7 @@ public class LevelUpUI : MonoBehaviour
     public TextMeshProUGUI[] OptionDescriptions;
 
     private List<UpgradeOption> _currentOptions;
+    private PlayerController _upgradingPlayer;
 
     private void Awake()
     {
@@ -29,14 +30,15 @@ public class LevelUpUI : MonoBehaviour
         }
     }
 
-    public void ShowOptions(List<UpgradeOption> options)
+    public void ShowOptions(PlayerController player, List<UpgradeOption> options)
     {
-        if (options == null || options.Count == 0)
+        if (player == null || options == null || options.Count == 0)
         {
             Debug.LogWarning("LevelUpUI: 没有可显示的升级选项");
             return;
         }
 
+        _upgradingPlayer = player;
         _currentOptions = options;
 
         if (Panel != null)
@@ -44,7 +46,7 @@ public class LevelUpUI : MonoBehaviour
             Panel.SetActive(true);
         }
 
-        // Time.timeScale 由 GameManager 管理
+        // 双人"升级不暂停"：时间缩放由 GameManager 管理，游戏世界继续运行
 
         int count = Mathf.Min(OptionButtons.Length, options.Count);
         for (int i = 0; i < OptionButtons.Length; i++)
@@ -82,14 +84,24 @@ public class LevelUpUI : MonoBehaviour
         }
 
         var option = _currentOptions[index];
-        GameManager.Instance?.Player?.ApplyUpgrade(option);
+        _upgradingPlayer?.ApplyUpgrade(option);
+        EndLevelUp();
+    }
+
+    /// <summary>
+    /// 结束升级：恢复玩家操作并隐藏面板（GameManager 面板复用时也会调用）
+    /// </summary>
+    public void EndLevelUp()
+    {
+        if (_upgradingPlayer != null)
+        {
+            _upgradingPlayer.IsChoosingUpgrade = false;
+            _upgradingPlayer = null;
+        }
 
         if (Panel != null)
         {
             Panel.SetActive(false);
         }
-
-        // 通知 GameManager 升级已选择，恢复游戏
-        GameManager.Instance?.OnUpgradeSelected();
     }
 }

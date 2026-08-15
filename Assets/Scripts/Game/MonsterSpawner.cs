@@ -95,6 +95,7 @@ public class MonsterSpawner : MonoBehaviour
     /// </summary>
     private Vector3 GetSpawnPosition()
     {
+        // 同屏双人共享相机（跟随玩家 1），刷怪环带以相机视角中心为圆心
         Vector3 playerPos = GameManager.Instance?.Player?.transform?.position ?? Vector3.zero;
         Vector2 playerPos2D = new Vector2(playerPos.x, playerPos.z);
         Vector2[] viewQuad = GetViewQuad(playerPos);

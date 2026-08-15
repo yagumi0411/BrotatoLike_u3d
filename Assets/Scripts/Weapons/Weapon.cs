@@ -18,6 +18,9 @@ public abstract class Weapon : MonoBehaviour
 
     protected virtual void Update()
     {
+        // 玩家升级中：停火（双人"升级不暂停"，武器暂停攻击）
+        if (OwnerPlayer != null && OwnerPlayer.IsChoosingUpgrade) return;
+
         AttackCooldown -= Time.deltaTime;
         if (CanAttack())
         {

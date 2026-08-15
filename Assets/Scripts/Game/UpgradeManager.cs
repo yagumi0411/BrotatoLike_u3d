@@ -40,7 +40,7 @@ public class UpgradeManager : MonoBehaviour
         }
     }
 
-    private void OnPlayerLevelUp()
+    private void OnPlayerLevelUp(PlayerStatsComponent stats)
     {
         var options = GenerateOptions(OptionCount);
 
@@ -50,7 +50,7 @@ public class UpgradeManager : MonoBehaviour
             return;
         }
 
-        LevelUpUI?.ShowOptions(options);
+        LevelUpUI?.ShowOptions(_player, options);
     }
 
     public List<UpgradeOption> GenerateOptions(int count)

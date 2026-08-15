@@ -60,7 +60,7 @@ public class ShadowMageEnemy : Enemy
 
     private void TryRangedAttack()
     {
-        var player = GameManager.Instance?.Player;
+        var player = OwnerPlayer; // 锁定目标（双人模式下各打各的）
         if (player == null) return;
 
         // 创建敌人投射物
