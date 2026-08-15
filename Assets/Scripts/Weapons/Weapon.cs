@@ -21,6 +21,9 @@ public abstract class Weapon : MonoBehaviour
         // 玩家升级中：停火（双人"升级不暂停"，武器暂停攻击）
         if (OwnerPlayer != null && OwnerPlayer.IsChoosingUpgrade) return;
 
+        // 联机：远端玩家的武器在本地不攻击（战斗同步在阶段 3 由服务器权威处理）
+        if (OwnerPlayer != null && !OwnerPlayer.IsLocallyControlled) return;
+
         AttackCooldown -= Time.deltaTime;
         if (CanAttack())
         {

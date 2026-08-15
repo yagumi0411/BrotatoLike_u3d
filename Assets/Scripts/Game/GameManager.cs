@@ -27,8 +27,13 @@ public class GameManager : MonoBehaviour
     /// <summary>当前局内的所有玩家（单机=1，同屏双人=2，联机=按连接数）</summary>
     public List<PlayerController> Players = new List<PlayerController>();
 
-    /// <summary>主玩家（玩家 1）：保留旧 API，兼容 HUD/相机/结算等单玩家引用</summary>
-    public PlayerController Player => Players.Count > 0 ? Players[0] : null;
+    /// <summary>主玩家：优先返回激活中的玩家（联机下为本地网络玩家），兼容 HUD/相机/结算等单玩家引用</summary>
+    public PlayerController Player =>
+        Players.Find(p => p != null && p.gameObject.activeInHierarchy)
+        ?? (Players.Count > 0 ? Players[0] : null);
+
+    /// <summary>新玩家注册事件（联机玩家生成后触发，HUD 等监听重绑）</summary>
+    public event Action OnPlayerRegistered;
 
     public enum EGameMode
     {
@@ -179,6 +184,8 @@ public class GameManager : MonoBehaviour
         Players.Add(player);
         if (player.StatsComponent != null)
             player.StatsComponent.OnLevelUp += OnPlayerLevelUp;
+
+        OnPlayerRegistered?.Invoke();
     }
 
     /// <summary>取距离指定位置最近的玩家</summary>
@@ -188,8 +195,9 @@ public class GameManager : MonoBehaviour
         float bestSqr = float.MaxValue;
         foreach (var player in Players)
         {
-            // 跳过未激活玩家（单人模式下玩家 2 停用，不能被索敌/磁吸）
-            if (player == null || !player.gameObject.activeInHierarchy) continue;
+            // 跳过未激活玩家（单人模式下玩家 2 停用）；
+            // 联机下只与本地控制玩家交互（远端玩家是同步幽灵，不参与本地索敌/磁吸）
+            if (player == null || !player.gameObject.activeInHierarchy || !player.IsLocallyControlled) continue;
             float distSqr = (player.transform.position - position).sqrMagnitude;
             if (distSqr < bestSqr)
             {
@@ -268,15 +276,36 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void StartGame()
     {
-        // 联机模式尚未实现（阶段 2），临时回退为本地双人，保证入口可玩
         if (GameMode == EGameMode.Online)
         {
-            Debug.LogWarning("[GameManager] 联机模式未完成，本次以本地双人模式开始");
-            GameMode = EGameMode.LocalCoop;
+            StartOnlineGame();
+            return;
         }
 
         // 先按模式调整玩家激活状态，再统一重置
         ApplyGameMode();
+        ResetPlayer();
+        ResetGameState();
+        SetState(EGameState.Playing);
+        MainHUD?.Rebind();
+        WaveManager?.StartGame();
+    }
+
+    /// <summary>联机模式：隐藏本地场景玩家，弹出联机面板（连接成功后由网络玩家触发开战）</summary>
+    private void StartOnlineGame()
+    {
+        foreach (var p in Players)
+        {
+            if (p != null)
+                p.gameObject.SetActive(false);
+        }
+        MainMenuUI?.ShowOnlinePanel();
+    }
+
+    /// <summary>本地网络玩家就绪（Host/Client 各自触发）：注册、开战</summary>
+    public void OnLocalPlayerReady(PlayerController player)
+    {
+        RegisterPlayer(player);
         ResetPlayer();
         ResetGameState();
         SetState(EGameState.Playing);

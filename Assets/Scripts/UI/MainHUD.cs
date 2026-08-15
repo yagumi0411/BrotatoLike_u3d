@@ -21,6 +21,10 @@ public class MainHUD : MonoBehaviour
 
     private void Start()
     {
+        // 联机玩家连接成功后生成，通过该事件自动重绑（单机下事件已在 Awake 触发，不影响）
+        if (GameManager.Instance != null)
+            GameManager.Instance.OnPlayerRegistered += Rebind;
+
         _player = GameManager.Instance?.Player;
         _waveManager = GameManager.Instance?.WaveManager;
 
@@ -93,6 +97,9 @@ public class MainHUD : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (GameManager.Instance != null)
+            GameManager.Instance.OnPlayerRegistered -= Rebind;
+
         if (_player != null)
         {
             _player.StatsComponent.OnHPChanged -= UpdateHP;

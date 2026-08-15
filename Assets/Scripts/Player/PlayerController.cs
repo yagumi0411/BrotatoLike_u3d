@@ -29,6 +29,9 @@ public class PlayerController : MonoBehaviour
     /// <summary>升级中：暂停自身输入与武器攻击（双人"升级不暂停"玩法）</summary>
     public bool IsChoosingUpgrade { get; set; }
 
+    /// <summary>本地控制权：单机/本地双人恒为 true；联机下仅 Owner 客户端为 true（远端玩家由 NetworkTransform 驱动）</summary>
+    public bool IsLocallyControlled = true;
+
     /// <summary>本局出生点（重新开始时回到这里）</summary>
     public Vector3 SpawnPosition;
     public Vector3 SpawnRotation;
@@ -85,6 +88,9 @@ public class PlayerController : MonoBehaviour
     {
         // 升级中：暂停操作（不移动、不转向），武器由 Weapon 自行停火
         if (IsChoosingUpgrade) return;
+
+        // 联机：远端玩家不读本地输入，位置由 NetworkTransform 同步驱动
+        if (!IsLocallyControlled) return;
 
         HandleInput();
         UpdateMovementVector();
