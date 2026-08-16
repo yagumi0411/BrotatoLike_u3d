@@ -55,7 +55,7 @@ MoveSpeed * StatMultiplier   →   MoveSpeed * (1f + (StatMultiplier - 1f) * 0.3
 |------|------|------|------|
 | 波次时长 | 30s | **20s** | 场景 WaveManager |
 | 波间休息 | 3s | **1s** | 场景 WaveManager |
-| 竞技场半径 | 50（场景覆盖值） | **20** | 场景 MonsterSpawner（代码默认 28） |
+| 竞技场半径 | 50（场景覆盖值） | **40** | 场景 MonsterSpawner（代码默认 28） |
 | 生成速率 | `1.5 + 0.35n` | **`2.0 + 0.4n`**（/秒） | MonsterSpawner |
 | XP 需求 | `10×(L+1)` | **`8×(L+1)`** | PlayerStatsComponent |
 | 武器 DPS | 基准 | **+20%** | 3 个武器 asset |
@@ -93,13 +93,14 @@ MoveSpeed * StatMultiplier   →   MoveSpeed * (1f + (StatMultiplier - 1f) * 0.3
 ### 四、怪物生成地点重构
 
 ```csharp
-// MonsterSpawner.GetSpawnPosition()
+// MonsterSpawner.GetSpawnPosition() 首版
 // 旧：以世界原点为圆心、半径 ArenaRadius 的单圆环（玩家走位后贴脸刷怪）
-// 新：以玩家为中心的环形带 [MinSpawnDistance=13, ArenaRadius=20]
+// 新：以玩家为中心的环形带 [MinSpawnDistance=13, ArenaRadius=40]
 playerPos + Random.insideUnitCircle.normalized * Random.Range(13f, 20f)
 ```
 - 修复"玩家离开圆心后怪物在 5 单位内凭空刷出"问题；生成点恒在玩家视野外（垂直方向）。
 - 副作用：接敌时间从 10s 缩至 6-7s，节奏更快（符合演示诉求）。
+- **注（8/4 当日后续升级）**：此环形带已被"视口四边形方向相关环带"取代（`GetViewQuad`/`GetViewDistance`，下限 = 该方向穿出屏幕距离 + SpawnMargin=3，上限 = 地图圆边界，360° 均匀来怪），见 README 与 `MonsterSpawner.cs:96-201`。
 
 ### 五、文档同步
 
@@ -109,9 +110,47 @@ playerPos + Random.insideUnitCircle.normalized * Random.Range(13f, 20f)
 | `Docs/GameCoreDesign.md` | 版本号、数值公式（指数缩放/生成速率/XP）、武器/敌人/升级表、FindTarget 逻辑、竞技场规格 |
 | `Docs/CHANGELOG.md` | 本文档 |
 
-### 遗留项（未处理）
+---
 
-- 环绕飞弹伤害为生成时快照，后期伤害升级对环绕武器无效（`SpellOrbitWeapon.cs`）
+## 2026-08-15/17 — 双人模式与联机骨架（NGO 阶段 0-2）
+
+> 对应提交：`45a8097`（阶段 0-1）、`5184a2d`（阶段 2）、`7cbef7b`（readme 更新）。
+> 分支策略：`main` 冻结为单机版基线（论文用），全部改造在 `feature/multiplayer`。
+
+### 一、输入抽象（IInputProvider）
+
+- 新建 `Player/IInputProvider.cs`（接口：MoveInput + AimDirection）、`KeyboardMouseInputProvider`（WASD + 鼠标）、`ArrowsInputProvider`（方向键 + 移动方向瞄准）。
+- `PlayerController.HandleInput` 不再直读键盘/鼠标，统一走接口——本地双人与联机复用同一套移动逻辑。
+
+### 二、同屏双人（本地双人模式）
+
+- `GameManager.Players` 列表化（`Player` 属性向后兼容）；`GameManager.Awake` 克隆场景玩家生成玩家 2（方向键 + 头顶血条 `PlayerStatusBar` + 材质区分）。
+- **升级不再全局暂停**：升级者 `IsChoosingUpgrade`（停操作/停武器）+ 3 秒无敌（`PlayerStatsComponent.BeginLevelUpState`），另一玩家照常战斗；`LevelUpUI.ShowOptions` 绑定升级者本人。
+- 敌人初始化锁定最近玩家为目标（各打各的）；经验球磁吸最近玩家。
+- 主菜单模式选择：3 个互斥 Toggle（单人/本地双人/联机双人）+ ToggleGroup，选中高亮走编辑器配置。
+
+### 三、联机骨架（NGO 2.13.1）
+
+- NGO 2.3.0 与 Unity 6.5 不兼容（CS0619：`GetInstanceID`/`SceneHandle` 废弃）→ 升级 **2.13.1**（transport 2.6.0）。
+- `PlayerNetworkBehaviour`（OnNetworkSpawn）：`IsOwner` 区分本地/远端——本地读输入可战斗，远端由 `NetworkTransform`（AuthorityMode=Owner，客户端权威移动）驱动、武器停火、不参与本地索敌。
+- 联机面板：`MainMenuUI` 运行时动态创建（IP 输入 + 创建房间/加入房间，UTP 配置地址）；`GameManager.StartOnlineGame` 隐藏场景玩家，连接后由网络玩家触发开战。
+- 架构决策：移动=客户端权威；伤害/击杀/升级=服务器权威（阶段 3 实施）；升级选项服务器生成 + RPC 广播（阶段 3）；对象池 × 网络前期"正确性优先"。
+
+### 四、文档同步
+
+| 文档 | 同步内容 |
+|------|---------|
+| `README.md` | 8/15 更新：双人/联机功能、输入抽象、视口四边形刷怪、升级规则变更，去除 emoji（提交 `7cbef7b`） |
+
+### 遗留项
+
+- 阶段 3：线上玩法同步（服务器权威伤害/击杀/升级、波次/刷怪/敌人同步）未开工
+- `GameFeel.cs`（8/16 创建，手感反馈：Hitstop/屏幕震动/命中特效池）已实现但**未接线**（零调用）；简历"7 项手感反馈"声明依赖接线后才成立
+- 联机模式待验证：需配置 `PlayerNetwork.prefab`（NetworkObject/NetworkTransform/PlayerNetworkBehaviour）与场景 NetworkManager 后双端测试
+
+### 遗留项（未处理，截至 2026-08-17 仍全部未解决）
+
+- 环绕飞弹伤害为生成时快照，后期伤害升级对环绕武器无效（`SpellOrbitWeapon.cs`）；且命中冷却为硬编码 0.5s，`AttackInterval` 字段对环绕武器不生效
 - 伤害飘字（`DamagePopup`）未池化，波 8+ 每秒 30+ 实例
 - 竞技场无物理边界墙（README"竞技场"名不副实，录视频时玩家可走出画面）
 - 玩家朝向依赖 Ground 层射线，场景无碰撞体导致模型朝向不更新（不影响核心玩法）

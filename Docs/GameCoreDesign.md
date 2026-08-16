@@ -11,12 +11,12 @@
 
 ### 1.1 游戏类型
 
-Top-down 2.5D 动作生存游戏。玩家控制一名法师，在封闭竞技场内对抗无限波次的怪物。武器自动瞄准攻击，击杀怪物掉落经验球，升级时暂停游戏并从 3 个选项中选 1 个强化。
+Top-down 2.5D 动作生存游戏。玩家控制一名法师，在封闭竞技场内对抗无限波次的怪物。武器自动瞄准攻击，击杀怪物掉落经验球，升级时从 3 个选项中选 1 个强化（单人模式暂停选择；双人模式升级不暂停，升级者本人短暂无敌）。
 
 ### 1.2 核心循环
 
 ```
-波次推进 → 怪物生成 → 武器自动攻击 → 击杀掉落经验 → 拾取经验升级 → 暂停选强化 → 继续
+波次推进 → 怪物生成 → 武器自动攻击 → 击杀掉落经验 → 拾取经验升级 → 选强化（单人暂停 / 双人升级者短暂无敌，游戏继续）
 ```
 
 直到玩家死亡，记录存活波次和等级。
@@ -28,7 +28,7 @@ Top-down 2.5D 动作生存游戏。玩家控制一名法师，在封闭竞技场
 | 引擎 | Unity 6.5 (6000.5.4f1) |
 | 语言 | C# |
 | 数据驱动 | ScriptableObject 驱动武器/敌人/升级配置 |
-| 架构模式 | Component-based ECS + OOP 混合 |
+| 架构模式 | 组件化 OOP + 数据驱动（无 ECS） |
 
 ---
 
@@ -59,14 +59,7 @@ XP_ToNextLevel(CurrentLevel) = 8 * (CurrentLevel + 1)
 EffectiveXP = Enemy.BaseXP * (1.0f + Stats.ExpGainMultiplier) * WaveXPMultiplier
 ```
 
-| 当前等级 | 升到下一级所需 XP |
-|----------|-------------------|
-| 1 | 16 |
-| 2 | 24 |
-| 3 | 32 |
-| 5 | 48 |
-| 10 | 88 |
-| N | 8 × (N + 1) |
+（示例：Lv.1→2 需 16 XP，Lv.5→6 需 48 XP，Lv.10→11 需 88 XP）
 
 ```csharp
 WaveXPMultiplier = 1.0f + (WaveNumber - 1) * 0.1f
@@ -75,7 +68,7 @@ WaveXPMultiplier = 1.0f + (WaveNumber - 1) * 0.1f
 ### 2.3 波次缩放
 
 ```csharp
-WaveInterval = 20 秒（波次间休息 1 秒）
+WaveInterval = 20 秒（波次间休息 1 秒）  // 代码默认 30s/3s，场景覆盖为 20s/1s
 
 EnemyStatMultiplier = 1.06^(WaveNumber - 1)  // 温和指数增长，前期平缓后期陡峭
 SpawnRate = 2.0f + WaveNumber * 0.4f  // 每秒生成怪物数
@@ -240,33 +233,9 @@ public class UpgradeOption : ScriptableObject
 }
 ```
 
-### 4.4 PlayerStats — 玩家属性快照
+### 4.4 玩家属性
 
-```csharp
-[System.Serializable]
-public struct PlayerStats
-{
-    // 基础值 (角色决定)
-    public float BaseMaxHP;
-    public float BaseMoveSpeed;
-    public float BasePickupRadius;
-
-    // 升级累加值
-    public float FlatHPBonus;         // MaxHP_Add 累加
-    public float PercentHPBonus;      // MaxHP_Mul 累加 (0.0~)
-    public float GlobalDamageMultiplier;   // Damage_All_Mul 累加
-    public float GlobalAttackSpeedMultiplier; // AttackSpeed_All_Mul 累加
-    public float FlatMoveSpeedBonus;  // MoveSpeed_Add 累加
-    public float ExpGainMultiplier;   // ExpRate_Mul 累加
-    public float FlatPickupRangeBonus; // PickupRange_Add 累加
-    public float CritChanceBonus;     // CritChance_Add 累加
-    public float CritDamageMultiplierBonus; // CritDamage_Mul 累加
-
-    // 运行时状态
-    public int CurrentLevel;
-    public int WeaponSlotCount;       // 已填充武器槽数
-}
-```
+玩家属性由 `PlayerStatsComponent`（挂载在玩家 GameObject 上的 MonoBehaviour）持有，字段与 §2.4 公式一一对应：基础值（BaseMaxHP/BaseMoveSpeed/BasePickupRadius）+ 升级累加值 + 运行时状态（CurrentHP/CurrentXP/CurrentLevel）。详见 §5.2。
 
 ---
 
@@ -294,19 +263,19 @@ public class PlayerController : MonoBehaviour
     private Vector2 _moveInput;
 
     // 方法
-    public bool AddWeapon(Weapon weapon);
+    public bool AddWeapon(WeaponDefinition weaponDef);   // 按类型运行时挂载武器组件
     public bool IsWeaponSlotFull();
     public int GetRemainingWeaponSlots();
     public void ApplyUpgrade(UpgradeOption option);
+    public void SpawnStartingWeapon();   // 初始武器（public，供 GameManager 重置调用）
 
-    // 受伤
-    public void TakeDamage(float damage);
+    // 死亡（由 StatsComponent.OnDeath 事件触发）
+    public void OnPlayerDeath();
 
-    // 初始化武器
-    private void SpawnStartingWeapon();
-
-    // 死亡
-    private void OnDeath();
+    // 本地控制权（联机）：仅 Owner 客户端读输入，远端由 NetworkTransform 驱动
+    public bool IsLocallyControlled = true;
+    // 升级中：暂停自身输入与武器攻击（双人"升级不暂停"）
+    public bool IsChoosingUpgrade { get; set; }
 }
 ```
 
@@ -321,7 +290,7 @@ public class PlayerStatsComponent : MonoBehaviour
     public float BaseMaxHP = 10f;
     public float BaseMoveSpeed = 6f;
     public float BasePickupRadius = 3f;
-    public WeaponDefinition StartingWeapon;
+    // 初始武器定义在 PlayerController.StartingWeaponPrefab（不在本组件）
 
     [Header("升级累加值")]
     public float FlatHPBonus;
@@ -357,10 +326,12 @@ public class PlayerStatsComponent : MonoBehaviour
     // === 事件 ===
     public System.Action<float, float> OnHPChanged;
     public System.Action<float, float, int> OnXPChanged;
-    public System.Action OnLevelUp;
+    public System.Action<PlayerStatsComponent> OnLevelUp;  // 带 sender，双人模式定位升级者
     public System.Action OnDeath;
 
-    private void LevelUp();
+    // === 升级无敌（双人"升级不暂停"玩法） ===
+    public bool IsInvincible { get; private set; }
+    public void BeginLevelUpState();   // 进入升级：3 秒无敌（LevelUpInvincibleDuration）
 }
 ```
 
@@ -381,7 +352,7 @@ public abstract class Weapon : MonoBehaviour
     protected float AttackCooldown;
 
     // 初始化
-    public virtual void Initialize(PlayerController owner);
+    public virtual void Initialize(PlayerController owner, WeaponDefinition def);
 
     // 每帧调用
     protected virtual void Update();
@@ -393,8 +364,8 @@ public abstract class Weapon : MonoBehaviour
     // 索敌
     protected virtual Enemy FindTarget();
 
-    // 执行攻击
-    protected virtual void Fire(Enemy target);
+    // 执行攻击（子类必须实现）
+    protected abstract void Fire(Enemy target);
 
     // 判断是否可以攻击
     protected virtual bool CanAttack();
@@ -448,9 +419,8 @@ float GetEffectiveAttackInterval()
 ```csharp
 public class MagicBulletWeapon : Weapon
 {
-    protected override void Fire(Enemy target);
-    protected override Enemy FindTarget();
-    private void SpawnBullet(Vector3 targetPos, float damage, bool isCrit);
+    // 索敌由基类 Weapon.FindTarget 统一实现（注册表 + 缓存目标 + 蓄水池采样）
+    protected override void Fire(Enemy target);   // 从静态 ObjectPool 取子弹并 Initialize
 }
 ```
 
@@ -465,8 +435,8 @@ public class MagicBulletWeapon : Weapon
 **Fire 逻辑:**
 
 1. 获取目标当前位置
-2. 调用 `SpawnBullet` 生成投射物
-3. 投射物飞向目标位置（非追踪，发射即确定方向）
+2. 从静态 `ObjectPool` 取子弹（消除运行时 Instantiate/Destroy）
+3. 子弹飞向目标位置（非追踪，发射即确定方向），寿命到期/命中回池
 
 **配置数据 (ScriptableObject 预设):**
 
@@ -493,14 +463,10 @@ public class FlameThrowerWeapon : Weapon
 {
     protected override void Update();
     protected override void Fire(Enemy target);
-    protected override Enemy FindTarget();
 
-    // 获取扇形范围内所有敌人
-    private List<Enemy> GetEnemiesInCone();
-
-    // 对每个锥形内敌人应用伤害
-    private float DamageTickTimer;
-    private Dictionary<Enemy, float> LastDamageTimeMap = new Dictionary<Enemy, float>();
+    // 伤害检测：Physics.OverlapSphere + 扇形角度过滤（非索敌，直接对范围内敌人结算）
+    // 伤害冷却：_lastDamageTimeMap 字典（isActiveAndEnabled 检查防池化泄漏）
+    // 火焰粒子：对象池复用（约 40 颗/秒），纯视觉不再检测伤害
 }
 ```
 
@@ -535,14 +501,11 @@ public class SpellOrbitWeapon : Weapon
 {
     protected override void Update();
 
-    // 环绕飞弹 GameObject 列表
+    // 环绕飞弹 GameObject 列表（静态池复用）
     private List<OrbitProjectile> OrbitProjectiles = new List<OrbitProjectile>();
 
-    // 生成环绕飞弹
-    private void SpawnOrbitProjectiles();
-
-    // 更新飞弹位置
-    private void UpdateOrbitPositions(float deltaTime);
+    // 生成环绕飞弹（初始化/重置时调用）
+    // 注意：命中冷却为 OrbitProjectile 硬编码 0.5s，WeaponDef.AttackInterval 对环绕武器不生效（遗留项）
 }
 ```
 
@@ -571,41 +534,33 @@ public class SpellOrbitWeapon : Weapon
 | OrbitSpeed | 180 (度/秒，即 2 秒一圈) |
 | MinWaveToAppear | 0 (初始可用) |
 
-### 5.7 Projectile / MagicBulletProjectile / OrbitProjectile — 投射物
+### 5.7 MagicBulletProjectile / OrbitProjectile — 投射物（两个独立类，无共同基类）
 
 ```csharp
-// 投射物基类
-public class Projectile : MonoBehaviour
+// 魔法弹投射物：直线飞行，命中敌人或寿命到期回池
+public class MagicBulletProjectile : MonoBehaviour
 {
-    public float Damage;
-    public bool IsCrit;
-    public PlayerController OwnerPlayer;
-    public Vector3 Direction;
-    public float Speed;
-    public float Lifetime;
+    private float _damage;
+    private bool _isCrit;
+    private Vector3 _direction;
+    private float _speed;
+    private float _lifetimeRemaining;
 
-    protected virtual void Update();
-    protected virtual void OnTriggerEnter(Collider other);
-    protected virtual void OnLifetimeExpired();
+    public void Initialize(float damage, bool isCrit, Vector3 dir, float speed, float lifetime);
+    private void Update();                // 飞行 + 寿命倒计时，到期回池
+    private void OnTriggerEnter(Collider other);   // 命中敌人 → Enemy.ReceiveDamage → 回池
 }
 
-// 魔法弹投射物: 直线飞行，命中敌人或到达存活时间后销毁
-public class MagicBulletProjectile : Projectile
+// 环绕飞弹：绕玩家旋转，碰撞敌人造成伤害（命中冷却硬编码 0.5s）
+public class OrbitProjectile : MonoBehaviour
 {
-    protected override void OnTriggerEnter(Collider other);
-}
+    private float _damage;
+    private float _radius;
+    private float _currentAngle;
 
-// 环绕飞弹: 绕玩家旋转，碰撞敌人造成伤害，有冷却
-public class OrbitProjectile : Projectile
-{
-    public float Angle;
-    public float Radius;
-    public Transform CenterTarget;
-    private Dictionary<Enemy, float> EnemyHitCooldowns = new Dictionary<Enemy, float>();
-    private float HitCooldownDuration;
-
-    public void UpdateOrbitPosition(float angle, float radius, Vector3 center);
-    protected override void OnTriggerEnter(Collider other);
+    public void SetOrbit(float damage, float radius, float angle);
+    private void Update();                // 按中心玩家位置计算环绕坐标
+    private void OnTriggerEnter(Collider other);
 }
 ```
 
@@ -622,36 +577,29 @@ public abstract class Enemy : MonoBehaviour
     public float CurrentHP;
     public float StatMultiplier;  // 波次缩放倍率，由 MonsterSpawner 设置
 
-    // 组件
-    [Header("组件")]
-    public Collider Collider;
-    public Renderer MeshRenderer;
+    // 组件（私有，SetupCollider 运行时创建：CapsuleCollider + Kinematic Rigidbody）
+    private Collider _collider;
+    private Rigidbody _rb;
 
-    // 移动
+    // 移动（冲刺状态在 GhostEnemy 子类）
     protected Vector3 MoveDirection;
-    protected bool IsDashing;
-    protected float DashCooldownRemaining;
-    protected float DashDurationRemaining;
-    protected Vector3 DashDirection;
 
-    // 初始化
-    public virtual void Initialize(EnemyDefinition def, float inStatMultiplier);
+    // 初始化（public；生成时锁定最近玩家为目标 OwnerPlayer，双人各打各的）
+    public virtual void Initialize(EnemyDefinition def, float statMultiplier);
 
-    // 受伤害
+    // 受伤害（暴击倍率取 OwnerPlayer 属性）
     public virtual void ReceiveDamage(float damage, bool isCrit = false);
 
-    // 死亡
+    // 死亡（通知击杀 + 生成经验球 + 回池 EnemyPool.Release）
     public virtual void OnDeath();
 
-    // 碰撞逻辑
-    protected virtual void OnTriggerEnter(Collider other);
-
-    // 移动逻辑
+    // 移动逻辑（Rigidbody.linearVelocity 物理移动，防重叠排斥）
     protected virtual void Update();
-    protected virtual void MoveTowardsPlayer(float deltaTime);
+    protected virtual void MoveTowardsPlayer();
+    private void CheckContactDamage();   // 距离检测 + 0.5s 冷却（非碰撞事件）
 
-    // 获取玩家位置
-    protected Vector3 GetPlayerLocation();
+    // 获取锁定目标位置
+    protected Vector3 GetTargetLocation();
 
     // 获取实际属性
     protected float GetEffectiveHP();
@@ -664,28 +612,11 @@ public abstract class Enemy : MonoBehaviour
 **具体敌人子类:**
 
 ```csharp
-// SlimeEnemy: 追踪移动，无特殊技能
-public class SlimeEnemy : Enemy { }
-
+// SlimeEnemy: 追踪移动，无特殊技能（重写 CreateVisual 用 VisualHelper 拼装模型）
 // SkeletonEnemy: 追踪移动，速度中等
-public class SkeletonEnemy : Enemy { }
-
 // BatEnemy: 追踪移动，快速低血量
-public class BatEnemy : Enemy { }
-
-// ShadowMageEnemy: 站桩，远程攻击
-public class ShadowMageEnemy : Enemy
-{
-    protected override void Update();
-    private void FireProjectile();
-    private float RangedAttackCooldown;
-}
-
-// GhostEnemy: 追踪移动 + 周期冲刺
-public class GhostEnemy : Enemy
-{
-    protected override void Update();
-}
+// ShadowMageEnemy: 站桩，远程攻击（TryRangedAttack 发射 EnemyProjectile 弹幕）
+// GhostEnemy: 追踪移动 + 周期冲刺（Initialize 预置冲刺冷却 + StartDash 冲刺）
 ```
 
 ### 5.9 EnemyProjectile — 敌人弹幕
@@ -694,12 +625,12 @@ public class GhostEnemy : Enemy
 public class EnemyProjectile : MonoBehaviour
 {
     public float Damage;
-    public Vector3 FlyDirection;
+    public Vector3 Direction;   // 发射即确定方向
     public float Speed;
-    public PlayerController TargetPlayer;
 
-    private void Update();
-    private void OnTriggerEnter(Collider other);
+    public void Initialize(float damage, Vector3 dir, float speed, float lifetime);
+    private void Update();      // 直线飞行 + 寿命销毁
+    private void OnTriggerEnter(Collider other);   // 命中任一玩家造成伤害
 }
 ```
 
@@ -719,10 +650,13 @@ public class XPOrb : MonoBehaviour
     private bool _isMagnetizing;
     private const float MagnetSpeed = 6f;
 
-    private void Update();
-    private void TryMagnet();
-
+    private void Update();      // 磁吸逻辑内联：找最近玩家（GetNearestPlayer），距离 ≤ 拾取范围进入磁吸
     private void OnTriggerEnter(Collider other);
+
+    // 静态对象池（Pool.Release 回收替代 Destroy；OnEnable 重置磁吸状态）
+    private static ObjectPool Pool;
+    public static void Spawn(Vector3 position, float xpValue);
+    public static void ClearAllOrbs();
 }
 ```
 
@@ -743,21 +677,29 @@ else:
 public class MonsterSpawner : MonoBehaviour
 {
     [Header("生成区域")]
-    public float ArenaRadius = 30f;
-    public LayerMask SpawnAreaMask;
+    public float ArenaRadius = 28f;      // 代码默认 28，场景覆盖为 40
+    public float MinSpawnDistance = 13f; // 兜底最小生成距离
+    public float SpawnMargin = 3f;       // 视野外余量
 
     [Header("配置")]
     private WaveManager _waveManager;
     private float _spawnTimer;
 
-    // 敌人预制体列表 (通过 Inspector 绑定)
-    public List<Enemy> EnemyPrefabs;
+    // 敌人定义列表（Inspector 绑定）
+    public List<EnemyDefinition> EnemyPrefabs;
 
     private void Update();
-    private void SpawnEnemy();
-    private Enemy PickEnemyType();
-    private Vector3 GetSpawnPosition();
-    private float GetSpawnInterval();
+    private void SpawnEnemy();           // EnemyPool.Get 按类型取（分池复用）
+    private Vector3 GetSpawnPosition();  // 视口四边形方向相关环带（见下）
+    private float GetSpawnInterval();    // 1 / (2.0 + Wave * 0.4)
+    public void ClearAllEnemies();       // 走注册表清场
+    public void ResetSpawner();
+
+    // 刷怪环带：方向均匀随机 360°；下限 = 该方向穿出屏幕视口四边形距离 + SpawnMargin；
+    // 上限 = 地图圆边界（射线-圆求交正根）；空间不足换方向（最多 8 次）+ 两级兜底
+    private Vector2[] GetViewQuad();     // 屏幕四角视线与玩家水平面求交（相机缺失回退 MinSpawnDistance）
+    private float GetViewDistance(Vector2 pos2D, Vector2 dir, Vector2[] quad);  // 射线-线段求交（克拉默法则）
+    private float GetMaxSpawnRadius(Vector3 playerPos, Vector3 dir);
 }
 ```
 
@@ -780,10 +722,11 @@ public class WaveManager : MonoBehaviour
     public System.Action<int> OnWaveChanged;
 
     public void StartGame();
+    public void ResetGame();
 
-    public float GetEnemyStatMultiplier();
+    public float GetEnemyStatMultiplier();  // 1.06^(Wave-1)
     public float GetXPWaveMultiplier();
-    public bool IsWaveActiveFunc();
+    public bool IsWaveActive { get; }       // 属性（原设计 IsWaveActiveFunc 未实现）
 
     private void Update();
     private void StartNextWave();
@@ -802,41 +745,48 @@ public class WaveManager : MonoBehaviour
 | 0:42 | 波次 3 开始 (解锁蝙蝠) |
 | ... | ... |
 
-### 5.13 GameManager — 游戏管理器
+### 5.13 GameManager — 游戏管理器（全局单例 + 状态机）
 
 ```csharp
 public class GameManager : MonoBehaviour
 {
-    [Header("预制体")]
-    public PlayerController PlayerPrefab;
-    public GameObject LevelUpUIPrefab;
-    public GameObject MainHUDUIPrefab;
+    public static GameManager Instance { get; private set; }
 
-    [Header("管理器")]
-    public WaveManager WaveManager;
-    public MonsterSpawner MonsterSpawner;
+    // 游戏状态机
+    public enum EGameState { MainMenu, Playing, Paused, LevelUp, GameOver }
+    public EGameState CurrentState { get; private set; }
 
-    [Header("UI")]
-    private GameObject _levelUpUIInstance;
-    private GameObject _mainHUDInstance;
-    private GameObject _gameOverUIInstance;
+    // 游戏模式（主菜单 Toggle 选择）
+    public enum EGameMode { Single, LocalCoop, Online }
+    public EGameMode GameMode = EGameMode.LocalCoop;
 
-    // 数据表
-    private List<UpgradeOption> _upgradeOptions;
-    private List<WeaponDefinition> _weapons;
+    // 玩家（多玩家支持）
+    public List<PlayerController> Players;          // 单机=1，同屏双人=2，联机=按连接数
+    public PlayerController Player { get; }         // 计算属性：首个激活玩家（兼容旧引用）
+    public void RegisterPlayer(PlayerController player);    // 幂等，绑定升级事件
+    public PlayerController GetNearestPlayer(Vector3 pos);  // 最近玩家（索敌/磁吸用）
 
-    // 暂停/恢复
+    // UI 引用（场景 Inspector 拖拽，非运行时创建）
+    public MainMenuUI MainMenuUI; public PauseUI PauseUI; public GameOverUI GameOverUI;
+    public MainHUD MainHUD; public LevelUpUI LevelUpUI;
+
+    // 暂停/恢复/重开/回主菜单（SetState 统一管理 UI 显隐 + timeScale）
+    public void StartGame();
     public void PauseGame();
     public void ResumeGame();
-
-    // 游戏结束
+    public void RestartGame();
+    public void ReturnToMainMenu();
     public void GameOver();
 
-    // 获取升级选项池
-    public List<UpgradeOption> GenerateUpgradeOptions(int count, int remainingWeaponSlots);
+    // 升级（双人"升级不暂停"：仅升级者停操作 + 3 秒无敌）
+    public void OnPlayerLevelUp(PlayerStatsComponent stats);
+    public List<UpgradeOption> GenerateUpgradeOptions(PlayerController player, int count, int remainingWeaponSlots);
 
-    private void Start();
-    private void BindPlayerEvents();
+    // 同屏双人：克隆场景玩家生成玩家 2（方向键 + 头顶血条 + 材质区分）
+    private void EnsureLocalPlayerTwo();
+    // 联机：隐藏场景玩家 → 联机面板 → 网络玩家生成后 OnLocalPlayerReady 开战
+    private void StartOnlineGame();
+    public void OnLocalPlayerReady(PlayerController player);
 }
 ```
 
@@ -845,23 +795,23 @@ public class GameManager : MonoBehaviour
 ```csharp
 public class LevelUpUI : MonoBehaviour
 {
-    // 三个选项按钮
+    // 三个选项按钮（TextMeshProUGUI 文字）
     public Button[] OptionButtons;
-    public Text[] OptionNames;
-    public Text[] OptionDescriptions;
-    public Image[] OptionIcons;
+    public TextMeshProUGUI[] OptionNames;
+    public TextMeshProUGUI[] OptionDescriptions;
 
-    // 当前选项数据
+    // 当前选项数据 + 升级者（双人面板复用）
     private List<UpgradeOption> _currentOptions;
+    private PlayerController _upgradingPlayer;
 
-    // 显示升级界面
-    public void ShowOptions(List<UpgradeOption> options);
+    // 显示升级界面（绑定升级者本人）
+    public void ShowOptions(PlayerController player, List<UpgradeOption> options);
 
-    // 选项选中回调
+    // 选项选中回调 → 应用升级 + 结束升级
     private void OnOptionSelected(int index);
 
-    // 关闭
-    public void Close();
+    // 结束升级：恢复玩家操作并隐藏面板（GameManager 面板复用时也调用）
+    public void EndLevelUp();
 }
 ```
 
@@ -898,14 +848,11 @@ public class MainHUD : MonoBehaviour
     public Text WaveText;
     public Text WaveTimerText;
 
-    [Header("武器槽")]
-    public Image[] WeaponSlots;
-
-    // 每帧更新
+    // 事件驱动更新（非轮询），绑定 Players[0]（主玩家）
     public void UpdateHP(float current, float max);
     public void UpdateXP(float current, float toNext, int level);
-    public void UpdateWave(int waveNumber, float timeRemaining);
-    public void UpdateWeaponSlots(List<Weapon> weapons);
+    public void UpdateWave(int wave);
+    public void Rebind();   // 重新绑定（重开/联机玩家生成后，订阅 GameManager.OnPlayerRegistered）
 }
 ```
 
@@ -943,32 +890,30 @@ public class MainHUD : MonoBehaviour
 
 ### 7.2 武器选项显示
 
-每个武器选项显示:
+每个武器选项显示（`LevelUpUI.GetDescription`）:
 
-| 显示项 | 示例 |
+| 显示项 | 说明 |
 |--------|------|
-| 名称 | 火焰喷射 |
-| 简介 | 向前方扇形范围持续喷射火焰 |
-| 伤害 | 伤害: 2/跳 |
-| 频率 | 频率: 0.15s |
-| 特殊 | [扇形 30° / 射程 4] |
+| 名称 | 升级选项资产名称（武器 asset 的 Name/Description 为空，显示文案来自 UpgradeOption 资产） |
+| 简介 | 升级选项资产 Description |
+| 伤害 | 伤害: {BaseDamage}（魔法弹 7 / 火焰 2.5 / 飞弹 2.5） |
+| 攻速 | 攻速: {AttackInterval}s |
 
 ---
 
 ## 8. 游戏完整流程
 
 ```
-GameManager.Start()
-├── 创建 WaveManager
-├── 创建 MonsterSpawner (绑定 WaveManager)
-├── 创建 MainHUD
-├── 生成玩家 PlayerController
-│   ├── StatsComponent 初始化 (BaseMaxHP=10, ...)
-│   ├── Camera 初始化
-│   ├── 生成初始武器 MagicBulletWeapon
-│   └── 绑定输入
-└── WaveManager.StartGame()
-    └── StartNextWave() → 波次 1 开始
+GameManager.Awake()
+├── 查找场景中已有的 WaveManager / MonsterSpawner / Player（场景预置，非运行时创建）
+├── 注册场景玩家 → EnsureLocalPlayerTwo()（双人模式克隆玩家 2）
+└── 查找 UI 引用（MainHUD / LevelUpUI）
+
+主菜单点击"开始游戏" → GameManager.StartGame()
+├── 按模式调整玩家（ApplyGameMode：单人停用 P2 / 本地双人激活 / 联机走网络流程）
+├── ResetPlayer()（所有玩家回出生点 + 重置属性 + 重新生成初始武器）
+├── SetState(Playing) → MainHUD.Rebind() → WaveManager.StartGame()
+└── StartNextWave() → 波次 1 开始
 
 游戏循环 (每帧 Update):
 ├── WaveManager.Update()
@@ -991,35 +936,33 @@ GameManager.Start()
 
 怪物死亡:
 ├── Enemy.OnDeath()
+├── GameManager.AddKill()（击杀计数）
 ├── 生成 XPOrb (ExpValue = Enemy.GetEffectiveXP())
-└── 销毁 Enemy
+└── EnemyPool.Release（回池复用，非 Destroy）
 
 经验球被拾取:
-├── XPOrb.OnTriggerEnter(Player)
+├── XPOrb 磁吸最近玩家 → Absorb()
 ├── StatsComponent.AddXP(ExpValue * ExpMultiplier)
 ├── 累积 XP >= XP_ToNextLevel?
-│   ├── 是 → LevelUp()
-│   │   ├── 增加 CurrentLevel
-│   │   ├── 重置 CurrentXP (溢出保留)
-│   │   └── GameManager.PauseGame() + 弹出升级界面
+│   ├── 是 → 升级循环（CurrentLevel++ → OnLevelUp(stats)）
+│   │   ├── GameManager.OnPlayerLevelUp(升级者)
+│   │   ├── 升级者 IsChoosingUpgrade=true + 3 秒无敌（游戏不暂停）
+│   │   └── LevelUpUI.ShowOptions(升级者, 3 选项)
 │   └── 否 → 继续
-└── 销毁 XPOrb
+└── XPOrb.Pool.Release（回池）
 
 升级选择:
-├── GameManager.GenerateUpgradeOptions(3, RemainingSlots)
-├── LevelUpUI.ShowOptions()
-├── 玩家点击某选项
-├── OnOptionSelected()
+├── GameManager.GenerateUpgradeOptions(升级者, 3, RemainingSlots)
+├── 玩家点击某选项 → OnOptionSelected()
 │   ├── 武器: PlayerController.AddWeapon()
 │   └── 数值: StatsComponent.ApplyUpgrade()
-├── GameManager.ResumeGame()
-└── 隐藏 LevelUpUI
+└── LevelUpUI.EndLevelUp()（恢复操作 + 隐藏面板）
 
 玩家死亡:
-├── PlayerController.OnDeath()
-├── GameManager.GameOver()
-│   ├── 显示结算 (存活波次、等级)
-│   └── 停止所有生成
+├── PlayerController.OnPlayerDeath()（由 StatsComponent.OnDeath 事件触发）
+├── GameManager.GameOver() → SetState(GameOver)
+│   ├── 显示结算 (存活波次、等级、击杀数、存活时间)
+│   └── 关闭升级面板（防双人模式另一玩家升级中时残留 UI）
 ```
 
 ---
@@ -1041,14 +984,16 @@ GameManager.Start()
 | 属性 | 值 |
 |------|-----|
 | 形状 | 圆形 |
-| 半径 | 20 Unity 单位（场景配置，代码默认 28） |
+| 半径 | 40 Unity 单位（场景配置，代码默认 28） |
 | 边界 | 暂无物理边界（规划中） |
-| 怪物生成位置 | 以玩家为中心的环形带 [13, 20]（视野外保底距离 13） |
-| 玩家起始位置 | 圆心 (0, 0, 0) |
+| 怪物生成位置 | 视口四边形方向相关环带（下限 = 该方向穿出屏幕距离 + SpawnMargin 3，上限 = 地图圆边界，360° 均匀来怪） |
+| 玩家起始位置 | 圆心 (0, 1.15, 0) |
 
 ---
 
 ## 11. 后续扩展规划
+
+> 更新（2026-08-17）：以下规划中，**同屏双人与联机框架已实现**（见 §13）。本节其余项仍为规划。
 
 ### 11.1 新武器
 
@@ -1077,7 +1022,27 @@ GameManager.Start()
 
 ---
 
-## 12. 关键设计原则
+## 12. 多玩家与联机（2026-08 新增）
+
+### 12.1 同屏双人（LocalCoop）
+
+- 入口：主菜单 3 个互斥 Toggle 选"本地双人"，点"开始游戏"后生效（ToggleGroup 管互斥与高亮，编辑器配置）
+- 实现：`GameManager.Awake` 克隆场景玩家生成玩家 2——方向键输入（`ArrowsInputProvider`）、头顶血条（`PlayerStatusBar`，世界空间 UI）、独立材质
+- 输入抽象：`IInputProvider`（MoveInput + AimDirection）三源复用——键盘鼠标 / 方向键 / 网络
+- 敌人：生成时锁定最近玩家为目标（各打各的）；经验球磁吸最近玩家
+- 升级不暂停：升级者 `IsChoosingUpgrade`（停操作/停武器）+ 3 秒无敌，另一玩家照常战斗
+
+### 12.2 联机双人（Online，骨架）
+
+- 技术栈：NGO 2.13.1（Unity 6.5 兼容版本，2.3.0 存在 CS0619 废弃 API 报错）+ UnityTransport（局域网）
+- `PlayerNetworkBehaviour`：OnNetworkSpawn 按 `IsOwner` 区分本地/远端——本地读输入可战斗并触发开战（`GameManager.OnLocalPlayerReady`），远端由 `NetworkTransform`（AuthorityMode=Owner）驱动位置、武器停火、不参与本地索敌
+- 联机面板：`MainMenuUI` 运行时动态创建（IP 输入 + 创建房间/加入房间）
+- 权威模型：移动=客户端权威；伤害/击杀/升级=服务器权威（阶段 3 实施）；升级选项服务器生成 + RPC 广播（规避随机种子不同步）
+- 阶段 3 未开工：玩法同步（波次/刷怪/敌人/伤害统一）待实施
+
+---
+
+## 13. 关键设计原则
 
 - **从简优先**: 所有系统第一版保持最小可行设计，保留扩展接口 (virtual / ScriptableObject / 枚举扩展)
 - **数据驱动**: 武器、敌人、升级数值全部走 ScriptableObject，方便编辑器内调数值
