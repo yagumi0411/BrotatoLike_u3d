@@ -72,9 +72,10 @@ public class PlayerController : MonoBehaviour
             Debug.LogError("PlayerController: 未找到 CharacterController，角色无法移动");
         }
 
-        // 无输入源时默认键盘鼠标（场景玩家零配置）
+        // 输入源优先取预置组件（Player.prefab 已挂 KeyboardMouseInputProvider）；
+        // 缺失时兜底挂载，保证场景零配置也能跑
         if (InputProvider == null)
-            InputProvider = gameObject.AddComponent<KeyboardMouseInputProvider>();
+            InputProvider = GetComponent<IInputProvider>() ?? gameObject.AddComponent<KeyboardMouseInputProvider>();
 
         // 注册到 GameManager（多玩家支持，幂等）
         GameManager.Instance?.RegisterPlayer(this);

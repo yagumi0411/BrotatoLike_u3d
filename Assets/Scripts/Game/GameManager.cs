@@ -1,7 +1,9 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using Random = UnityEngine.Random;   // 消除与 System.Random 的二义性
 
 public class GameManager : MonoBehaviour
 {
@@ -45,6 +47,8 @@ public class GameManager : MonoBehaviour
     [Header("游戏模式")]
     public EGameMode GameMode = EGameMode.LocalCoop;
     public Material Player2Material;
+    [Tooltip("玩家 2 头顶血条预制体（结构在编辑器搭建）")]
+    public GameObject PlayerStatusBarPrefab;
 
     // === UI 组件（由你在 Inspector 中拖拽） ===
     [Header("UI 组件")]
@@ -188,6 +192,18 @@ public class GameManager : MonoBehaviour
         OnPlayerRegistered?.Invoke();
     }
 
+    /// <summary>随机取一个激活中的本地控制玩家（敌人仇恨分配：双人各分担一半）</summary>
+    public PlayerController GetRandomPlayer()
+    {
+        var candidates = new List<PlayerController>();
+        foreach (var player in Players)
+        {
+            if (player == null || !player.gameObject.activeInHierarchy || !player.IsLocallyControlled) continue;
+            candidates.Add(player);
+        }
+        return candidates.Count > 0 ? candidates[UnityEngine.Random.Range(0, candidates.Count)] : null;
+    }
+
     /// <summary>取距离指定位置最近的玩家</summary>
     public PlayerController GetNearestPlayer(Vector3 position)
     {
@@ -262,8 +278,9 @@ public class GameManager : MonoBehaviour
         if (visual != null && Player2Material != null)
             visual.GetComponent<Renderer>().material = Player2Material;
 
-        // 玩家 2 无 HUD 面板，挂头顶血条
-        p2.AddComponent<PlayerStatusBar>();
+        // 玩家 2 无 HUD 面板，实例化头顶血条（prefab 结构，运行时装配）
+        if (PlayerStatusBarPrefab != null)
+            Instantiate(PlayerStatusBarPrefab, p2.transform);
 
         // 注册（入列表 + 绑定升级事件）
         RegisterPlayer(p2Controller);

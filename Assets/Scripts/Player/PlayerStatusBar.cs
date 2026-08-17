@@ -2,66 +2,55 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 玩家 2 头顶血条（世界空间 UI，运行时创建，零场景配置）。
-/// 玩家 1 使用主 HUD，双人模式第二个玩家没有 HUD 面板，用头顶血条补足感知。
+/// 玩家头顶血条（世界空间 UI）。结构在 PlayerStatusBar.prefab 中搭建（编辑器配置），
+/// 本脚本只负责绑定血量事件与填充更新。
 /// </summary>
 public class PlayerStatusBar : MonoBehaviour
 {
-    private Image _fill;
+    [Tooltip("血量填充条（prefab 中配置，Filled 水平填充）")]
+    public Image Fill;
+    [Tooltip("经验填充条（prefab 中配置，位于血条下方）")]
+    public Image XPFill;
+
     private PlayerStatsComponent _stats;
 
     private void Start()
     {
-        _stats = GetComponent<PlayerStatsComponent>();
-        Build();
+        // 血条实例化在玩家下，属性组件在父级玩家上
+        _stats = GetComponentInParent<PlayerStatsComponent>();
+        if (Fill == null || XPFill == null)
+        {
+            Debug.LogWarning("PlayerStatusBar: Fill/XPFill 未完整引用（请在 prefab 中拖入）");
+            return;
+        }
 
         if (_stats != null)
         {
             _stats.OnHPChanged += OnHPChanged;
+            _stats.OnXPChanged += OnXPChanged;
             OnHPChanged(_stats.CurrentHP, _stats.GetEffectiveMaxHP());
+            OnXPChanged(_stats.CurrentXP, _stats.GetXPToNextLevel(), _stats.CurrentLevel);
         }
     }
 
     private void OnDestroy()
     {
         if (_stats != null)
+        {
             _stats.OnHPChanged -= OnHPChanged;
-    }
-
-    private void Build()
-    {
-        var canvasGo = new GameObject("PlayerStatusCanvas");
-        var canvas = canvasGo.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
-        canvasGo.transform.SetParent(transform, false);
-        canvasGo.transform.localPosition = new Vector3(0f, 2.4f, 0f);
-        canvasGo.transform.localScale = Vector3.one * 0.01f;
-
-        // 背景
-        Image bg = CreateBar("HP_BG", new Color(0f, 0f, 0f, 0.6f));
-        bg.transform.SetParent(canvasGo.transform, false);
-        bg.rectTransform.sizeDelta = new Vector2(2.4f, 0.3f);
-
-        // 血量填充（Filled 水平填充，随血量变化）
-        _fill = CreateBar("HP_Fill", new Color(0.2f, 0.9f, 0.3f));
-        _fill.transform.SetParent(bg.transform, false);
-        _fill.rectTransform.sizeDelta = new Vector2(2.4f, 0.3f);
-        _fill.type = Image.Type.Filled;
-        _fill.fillMethod = Image.FillMethod.Horizontal;
-        _fill.fillOrigin = 0;
-    }
-
-    private static Image CreateBar(string name, Color color)
-    {
-        var go = new GameObject(name);
-        var img = go.AddComponent<Image>();
-        img.color = color;
-        return img;
+            _stats.OnXPChanged -= OnXPChanged;
+        }
     }
 
     private void OnHPChanged(float hp, float maxHp)
     {
-        if (_fill != null)
-            _fill.fillAmount = Mathf.Clamp01(hp / Mathf.Max(maxHp, 0.001f));
+        if (Fill != null)
+            Fill.fillAmount = Mathf.Clamp01(hp / Mathf.Max(maxHp, 0.001f));
+    }
+
+    private void OnXPChanged(float current, float toNext, int level)
+    {
+        if (XPFill != null)
+            XPFill.fillAmount = Mathf.Clamp01(current / Mathf.Max(toNext, 0.001f));
     }
 }

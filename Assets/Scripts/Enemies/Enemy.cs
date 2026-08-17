@@ -19,8 +19,8 @@ public abstract class Enemy : MonoBehaviour
         EnemyDef = def;
         StatMultiplier = statMultiplier;
         CurrentHP = GetEffectiveHP();
-        // 双人模式：锁定离生成点最近的玩家为目标（各打各的，不会全追一个人）
-        OwnerPlayer = GameManager.Instance?.GetNearestPlayer(transform.position);
+        // 双人模式：随机锁定一个玩家为目标（各分担一半仇恨；单机只有一个玩家不受影响）
+        OwnerPlayer = GameManager.Instance?.GetRandomPlayer();
         SetupCollider();
         IgnorePlayerCollision();
         CreateVisual();
