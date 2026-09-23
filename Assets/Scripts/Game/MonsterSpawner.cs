@@ -1,5 +1,4 @@
 using System.Linq;
-using System.Threading;
 using UnityEngine;
 
 public class MonsterSpawner : MonoBehaviour
@@ -33,8 +32,15 @@ public class MonsterSpawner : MonoBehaviour
         }
     }
 
-    private float GetSpawnInterval() =>
-        1f / (2f + _waveManager.CurrentWave * 0.4f);
+    private float GetSpawnInterval()
+    {
+        float baseInterval = 1f / (2f + _waveManager.CurrentWave * 0.4f);
+        float multiplier = GameManager.Instance?.DifficultyManager?.GetSpawnRateMultiplier() ?? 1f;
+        return Mathf.Max(0.08f, baseInterval / multiplier);
+    }
+
+    public float GetCurrentSpawnInterval() =>
+        _waveManager != null ? GetSpawnInterval() : 0f;
 
     private void SpawnEnemy()
     {
@@ -46,7 +52,8 @@ public class MonsterSpawner : MonoBehaviour
 
         if (available.Count == 0) return;
 
-        var def = available[Random.Range(0, available.Count)];
+        var def = GameManager.Instance?.DifficultyManager?.SelectEnemy(available)
+                  ?? available[Random.Range(0, available.Count)];
         Vector3 pos = GetSpawnPosition();
 
         //Debug.Log($"[MonsterSpawner] Spawning {def.Name} at {pos}");
@@ -183,7 +190,7 @@ public class MonsterSpawner : MonoBehaviour
             if (s < 0f || s > 1f || t <= 0f) continue;     // 交点不在边内或射线反向
             best = Mathf.Min(best, t);
         }
-        return best < float.MaxValue ? best + SpawnMargin : MinSpawnDistance;
+        return best < float.MaxValue ? Mathf.Max(MinSpawnDistance, best + SpawnMargin) : MinSpawnDistance;
     }
 
     /// <summary>

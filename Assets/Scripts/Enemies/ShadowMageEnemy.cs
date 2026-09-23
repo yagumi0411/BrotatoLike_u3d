@@ -33,6 +33,8 @@ public class ShadowMageEnemy : Enemy
 
     protected override void CreateVisual()
     {
+        if (transform.Find("Robe") != null) return;
+
         float scale = EnemyDef.MeshScale;
         Color robeColor = new Color(0.2f, 0.05f, 0.35f);
 
@@ -71,6 +73,6 @@ public class ShadowMageEnemy : Enemy
 
         var proj = projectile.AddComponent<EnemyProjectile>();
         Vector3 dir = (player.transform.position - transform.position).normalized;
-        proj.Initialize(EnemyDef.ProjectileDamage * StatMultiplier, dir, EnemyDef.ProjectileSpeed, 3f);
+        proj.Initialize(EnemyDef.ProjectileDamage * StatMultiplier * GetDifficultyDamageMultiplier(), dir, EnemyDef.ProjectileSpeed, 3f);
     }
 }

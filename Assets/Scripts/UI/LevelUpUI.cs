@@ -62,6 +62,13 @@ public class LevelUpUI : MonoBehaviour
         }
     }
 
+    public void Hide()
+    {
+        _currentOptions = null;
+        if (Panel != null)
+            Panel.SetActive(false);
+    }
+
     private string GetDescription(UpgradeOption opt)
     {
         if (opt == null) return string.Empty;
@@ -84,10 +91,7 @@ public class LevelUpUI : MonoBehaviour
         var option = _currentOptions[index];
         GameManager.Instance?.Player?.ApplyUpgrade(option);
 
-        if (Panel != null)
-        {
-            Panel.SetActive(false);
-        }
+        Hide();
 
         // 通知 GameManager 升级已选择，恢复游戏
         GameManager.Instance?.OnUpgradeSelected();

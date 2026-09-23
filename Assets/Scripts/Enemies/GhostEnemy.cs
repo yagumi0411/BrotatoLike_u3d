@@ -40,6 +40,8 @@ public class GhostEnemy : Enemy
 
     protected override void CreateVisual()
     {
+        if (transform.Find("Head") != null) return;
+
         float scale = EnemyDef.MeshScale;
         Color ghostColor = new Color(0.75f, 0.85f, 0.95f);
 

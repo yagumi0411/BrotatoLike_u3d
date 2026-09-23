@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using System.Collections.Generic;
-using System.Linq;
 
 public class GameManager : MonoBehaviour
 {
@@ -23,6 +22,7 @@ public class GameManager : MonoBehaviour
     public WaveManager WaveManager { get; private set; }
     public MonsterSpawner MonsterSpawner { get; private set; }
     public PlayerController Player { get; private set; }
+    public DifficultyManager DifficultyManager { get; private set; }
 
     // === UI 组件（由你在 Inspector 中拖拽） ===
     [Header("UI 组件")]
@@ -37,6 +37,10 @@ public class GameManager : MonoBehaviour
     public List<UpgradeOption> UpgradeOptionPool;
     public List<WeaponDefinition> WeaponDefinitions;
 
+    [Header("难度模式")]
+    [Tooltip("Fixed 用于对照实验；Adaptive 根据玩家近期表现调节敌人压力")]
+    public EDifficultyMode DifficultyMode = EDifficultyMode.Adaptive;
+
     // === 地图配置（预留接口） ===
     [Header("地图")]
     public string[] MapNames = new string[] { "竞技场" };
@@ -50,6 +54,7 @@ public class GameManager : MonoBehaviour
     private int _selectedMapIndex;
     private Vector3 _playerStartPosition;
     private Vector3 _playerStartRotation;
+    private int _pendingLevelUps;
 
     private void Awake()
     {
@@ -63,6 +68,10 @@ public class GameManager : MonoBehaviour
         WaveManager = FindAnyObjectByType<WaveManager>();
         MonsterSpawner = FindAnyObjectByType<MonsterSpawner>();
         Player = FindAnyObjectByType<PlayerController>();
+        DifficultyManager = GetComponent<DifficultyManager>();
+        if (DifficultyManager == null)
+            DifficultyManager = gameObject.AddComponent<DifficultyManager>();
+        DifficultyManager.Mode = DifficultyMode;
 
         // 记录玩家的初始位置（用于重新开始）
         if (Player != null)
@@ -97,6 +106,7 @@ public class GameManager : MonoBehaviour
         {
             Player.StatsComponent.OnLevelUp += OnPlayerLevelUp;
         }
+        DifficultyManager?.Initialize(Player);
     }
 
     private void Update()
@@ -163,6 +173,8 @@ public class GameManager : MonoBehaviour
     {
         ResetPlayer();
         ResetGameState();
+        MonsterSpawner?.ResetSpawner();
+        DifficultyManager?.ResetSession();
         SetState(EGameState.Playing);
         MainHUD?.Rebind();
         WaveManager?.StartGame();
@@ -194,6 +206,7 @@ public class GameManager : MonoBehaviour
         ResetWorld();
         ResetGameState();
         ResetPlayer();
+        DifficultyManager?.ResetSession();
         SetState(EGameState.Playing);
         MainHUD?.Rebind();
         WaveManager?.StartGame();
@@ -229,25 +242,35 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void OnPlayerLevelUp()
     {
-        Debug.Log($"[GameManager] OnPlayerLevelUp called, Level={Player?.StatsComponent.CurrentLevel}, LevelUpUI={(LevelUpUI != null ? "OK" : "NULL")}");
+        _pendingLevelUps++;
+        TryShowNextLevelUp();
+    }
 
-        if (LevelUpUI != null)
+    private void TryShowNextLevelUp()
+    {
+        while (_pendingLevelUps > 0)
         {
+            if (LevelUpUI == null)
+            {
+                _pendingLevelUps = 0;
+                return;
+            }
+
             int remainingSlots = Player != null ? Player.GetRemainingWeaponSlots() : 0;
-            var options = GenerateUpgradeOptions(3, remainingSlots);
-            Debug.Log($"[GameManager] Generated {options.Count} options (UpgradeOptionPool has {UpgradeOptionPool?.Count ?? 0} items)");
+            List<UpgradeOption> options = GenerateUpgradeOptions(3, remainingSlots);
 
             if (options.Count > 0)
             {
                 LevelUpUI.ShowOptions(options);
                 SetState(EGameState.LevelUp);
-                Debug.Log($"[GameManager] SetState LevelUp, timeScale={Time.timeScale}");
+                return;
             }
-            else
-            {
-                Debug.LogWarning("[GameManager] 没有可用的升级选项，跳过升级");
-            }
+
+            _pendingLevelUps--;
+            Debug.LogWarning("[GameManager] 没有可用的升级选项，跳过本次升级");
         }
+
+        ResumeGame();
     }
 
     /// <summary>
@@ -255,7 +278,9 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void OnUpgradeSelected()
     {
-        ResumeGame();
+        if (_pendingLevelUps > 0)
+            _pendingLevelUps--;
+        TryShowNextLevelUp();
     }
 
     /// <summary>
@@ -264,6 +289,7 @@ public class GameManager : MonoBehaviour
     public void AddKill()
     {
         TotalKills++;
+        DifficultyManager?.RecordKill();
     }
 
     /// <summary>
@@ -272,62 +298,42 @@ public class GameManager : MonoBehaviour
     public List<UpgradeOption> GenerateUpgradeOptions(int count, int remainingWeaponSlots)
     {
         count = Mathf.Max(count, 1);
-        var result = new List<UpgradeOption>();
-
-        // 1. 筛选可用的数值升级选项
+        var candidates = new List<UpgradeOption>();
         int playerLevel = Player != null ? Player.StatsComponent.CurrentLevel : 1;
-        var statUpgrades = UpgradeOptionPool?
-            .Where(o => o.Type != EUpgradeType.Weapon && o.MinLevelToAppear <= playerLevel)
-            .ToList() ?? new List<UpgradeOption>();
-
-        // 2. 筛选可用的武器升级选项
         int currentWave = WaveManager?.CurrentWave ?? 1;
-        var equippedTypes = Player?.EquippedWeapons
-            .Select(w => w.WeaponDef.Type)
-            .ToHashSet() ?? new HashSet<EWeaponType>();
-
-        var weaponUpgrades = UpgradeOptionPool?
-            .Where(o => o.Type == EUpgradeType.Weapon && o.WeaponDef != null)
-            .Where(o => o.MinLevelToAppear <= playerLevel)
-            .Where(o => o.WeaponDef.MinWaveToAppear <= currentWave)
-            .Where(o => !equippedTypes.Contains(o.WeaponDef.Type))
-            .ToList() ?? new List<UpgradeOption>();
-
-        // 3. 决定武器选项数量
-        int weaponCount = Mathf.Min(Random.Range(1, count + 1), remainingWeaponSlots, weaponUpgrades.Count);
-        int statCount = count - weaponCount;
-
-        // 4. 随机选取
-        if (weaponCount > 0 && weaponUpgrades.Count > 0)
+        var equippedTypes = new HashSet<EWeaponType>();
+        if (Player != null)
         {
-            var selectedWeapons = weaponUpgrades.OrderBy(_ => Random.value).Take(weaponCount);
-            result.AddRange(selectedWeapons);
-        }
-        else
-        {
-            statCount = count; // 没有可用武器时全用数值
+            foreach (Weapon weapon in Player.EquippedWeapons)
+            {
+                if (weapon != null && weapon.WeaponDef != null)
+                    equippedTypes.Add(weapon.WeaponDef.Type);
+            }
         }
 
-        if (statCount > 0 && statUpgrades.Count > 0)
+        if (UpgradeOptionPool != null)
         {
-            var selectedStats = statUpgrades.OrderBy(_ => Random.value).Take(statCount);
-            result.AddRange(selectedStats);
+            foreach (UpgradeOption option in UpgradeOptionPool)
+            {
+                if (option == null || option.MinLevelToAppear > playerLevel) continue;
+                if (option.Type == EUpgradeType.Weapon)
+                {
+                    if (remainingWeaponSlots <= 0 || option.WeaponDef == null) continue;
+                    if (option.WeaponDef.MinWaveToAppear > currentWave) continue;
+                    if (equippedTypes.Contains(option.WeaponDef.Type)) continue;
+                }
+                candidates.Add(option);
+            }
         }
 
-        // 5. 还不够？从全部池子随机补
-        if (result.Count < count && UpgradeOptionPool != null)
+        for (int i = candidates.Count - 1; i > 0; i--)
         {
-            var fillers = UpgradeOptionPool
-                .Where(o => o.MinLevelToAppear <= playerLevel)
-                .OrderBy(_ => Random.value)
-                .Take(count - result.Count);
-            result.AddRange(fillers);
+            int j = Random.Range(0, i + 1);
+            (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
         }
 
-        // 6. 打乱顺序
-        result = result.OrderBy(_ => Random.value).ToList();
-
-        return result;
+        int optionCount = Mathf.Min(count, candidates.Count);
+        return candidates.GetRange(0, optionCount);
     }
 
     // === 内部方法 ===
@@ -336,13 +342,19 @@ public class GameManager : MonoBehaviour
     {
         TotalKills = 0;
         GamePlayTime = 0f;
+        _pendingLevelUps = 0;
+        LevelUpUI?.Hide();
     }
 
     private void ResetWorld()
     {
         // 清除所有敌人
         if (MonsterSpawner != null)
+        {
             MonsterSpawner.ClearAllEnemies();
+            MonsterSpawner.ResetSpawner();
+        }
+        EnemyRegistry.Clear();
 
         // 清除所有经验球
         XPOrb.ClearAllOrbs();

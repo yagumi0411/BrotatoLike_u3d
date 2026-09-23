@@ -27,6 +27,8 @@ public class PlayerStatsComponent : MonoBehaviour
     // 事件
     public event Action<float, float> OnHPChanged;
     public event Action<float, float, int> OnXPChanged;
+    public event Action<float> OnDamageTaken;
+    public event Action<float> OnXPGained;
     public event Action OnLevelUp;
     public event Action OnDeath;
 
@@ -67,6 +69,7 @@ public class PlayerStatsComponent : MonoBehaviour
         float multiplier = GetEffectiveExpMultiplier();
         amount *= multiplier;
         CurrentXP += amount;
+        OnXPGained?.Invoke(amount);
 
         while (CurrentXP >= GetXPToNextLevel())
         {
@@ -80,7 +83,9 @@ public class PlayerStatsComponent : MonoBehaviour
 
     public void TakeDamage(float damage)
     {
+        damage = Mathf.Max(0f, damage);
         CurrentHP -= damage;
+        OnDamageTaken?.Invoke(damage);
         OnHPChanged?.Invoke(CurrentHP, GetEffectiveMaxHP());
 
         if (CurrentHP <= 0)

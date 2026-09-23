@@ -13,12 +13,17 @@ public abstract class Enemy : MonoBehaviour
     private Rigidbody _rb;
     private Collider _collider;
     private float _contactDamageTimer;
+    private float _difficultyHealthMultiplier = 1f;
+    private float _difficultyDamageMultiplier = 1f;
 
     public virtual void Initialize(EnemyDefinition def, float statMultiplier)
     {
         EnemyDef = def;
         StatMultiplier = statMultiplier;
+        _difficultyHealthMultiplier = GameManager.Instance?.DifficultyManager?.GetEnemyHealthMultiplier() ?? 1f;
+        _difficultyDamageMultiplier = GameManager.Instance?.DifficultyManager?.GetEnemyDamageMultiplier() ?? 1f;
         CurrentHP = GetEffectiveHP();
+        _contactDamageTimer = 0f;
         OwnerPlayer = GameManager.Instance?.Player;
         SetupCollider();
         IgnorePlayerCollision();
@@ -63,6 +68,7 @@ public abstract class Enemy : MonoBehaviour
                          | RigidbodyConstraints.FreezeRotationY
                          | RigidbodyConstraints.FreezeRotationZ;
         _rb.useGravity = false;
+        _rb.linearVelocity = Vector3.zero;
     }
 
     protected virtual void CreateVisual()
@@ -156,10 +162,11 @@ public abstract class Enemy : MonoBehaviour
     protected Vector3 GetPlayerLocation() =>
         GameManager.Instance?.Player?.transform?.position ?? Vector3.zero;
 
-    protected float GetEffectiveHP() => EnemyDef.BaseHP * StatMultiplier;
+    protected float GetEffectiveHP() => EnemyDef.BaseHP * StatMultiplier * _difficultyHealthMultiplier;
     // 移速只受 30% 波次缩放，防止后期怪物速度反超玩家导致无法走位
     protected float GetEffectiveMoveSpeed() =>
         EnemyDef.MoveSpeed * (1f + (StatMultiplier - 1f) * 0.3f);
-    protected float GetEffectiveContactDamage() => EnemyDef.ContactDamage * StatMultiplier;
+    protected float GetEffectiveContactDamage() => EnemyDef.ContactDamage * StatMultiplier * _difficultyDamageMultiplier;
+    protected float GetDifficultyDamageMultiplier() => _difficultyDamageMultiplier;
     protected float GetEffectiveXP() => EnemyDef.BaseXP * GameManager.Instance.WaveManager.GetXPWaveMultiplier();
 }
