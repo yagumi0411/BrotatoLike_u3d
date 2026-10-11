@@ -1,7 +1,8 @@
 # 游戏核心开发文档 — BrotatoLike
 
 > **面向受众**: 程序员 & AI 实现者
-> **用途**: 面试 Demo 实现规范
+> **用途**: 当前实现说明与后续扩展参考
+> **更新日期**: 2026-10-12；数值以现有场景和配置资产为准。
 > **主题**: 魔法风格 Top-Down 无限波次生存游戏
 > **引擎**: Unity 6.5 (6000.5.4f1) (C# 实现)
 
@@ -11,15 +12,16 @@
 
 ### 1.1 游戏类型
 
-Top-down 2.5D 动作生存游戏。玩家控制一名法师，在封闭竞技场内对抗无限波次的怪物。武器自动瞄准攻击，击杀怪物掉落经验球，升级时暂停游戏并从 3 个选项中选 1 个强化。
+Top-down 2.5D 动作生存游戏。玩家控制一名法师，在竞技场内对抗无限波次的怪物。武器自动瞄准攻击，击杀怪物掉落经验球，升级时暂停游戏并从 3 个选项中选 1 个强化。
 
 ### 1.2 核心循环
 
 ```
-波次推进 → 怪物生成 → 武器自动攻击 → 击杀掉落经验 → 拾取经验升级 → 暂停选强化 → 继续
+主菜单分配天赋 → 开始对局 → 战斗 / 升级 → 波末商店 → 手动下一波
+死亡 / 重开 / 返回菜单 → 结算局外经验 → 跨局保存 → 主菜单继续成长
 ```
 
-直到玩家死亡，记录存活波次和等级。
+击杀直接获得金币，经验球仍需拾取。结束对局记录波次、等级、击杀和战斗时间，并按有效对局规则结算独立天赋经验；即时退出不产生最低奖励。
 
 ### 1.3 技术架构
 
@@ -28,7 +30,7 @@ Top-down 2.5D 动作生存游戏。玩家控制一名法师，在封闭竞技场
 | 引擎 | Unity 6.5 (6000.5.4f1) |
 | 语言 | C# |
 | 数据驱动 | ScriptableObject 驱动武器/敌人/升级配置 |
-| 架构模式 | Component-based ECS + OOP 混合 |
+| 架构模式 | MonoBehaviour 组件化 + OOP（未采用 Unity Entities ECS） |
 
 ### 1.4 后续玩法方向（规划，尚未实现）
 
@@ -59,7 +61,7 @@ Top-down 2.5D 动作生存游戏。玩家控制一名法师，在封闭竞技场
 ### 2.1 伤害计算
 
 ```csharp
-RawDamage = Weapon.BaseDamage * (1.0f + Stats.GlobalDamageMultiplier)
+RawDamage = Weapon.BaseDamage * Stats.GetEffectiveDamageMultiplier()
 
 if Random.value < EffectiveCritChance:
     FinalDamage = RawDamage * (1.5f + Stats.CritDamageMultiplierBonus)
@@ -68,8 +70,8 @@ else:
 ```
 
 - `Weapon.BaseDamage`: 武器基础伤害，每个武器类型独立配置
-- `Stats.GlobalDamageMultiplier`: 由 `Damage_All_Mul` 类升级累加（如 0.0 → 0.1 → 0.2）
-- `EffectiveCritChance`: 暴击率 = Mathf.Clamp(Stats.CritChanceBonus, 0.0f, 0.6f)
+- `Stats.GetEffectiveDamageMultiplier()`: 1 + 局内全局伤害加成 + 本局天赋伤害快照；不重复修改武器资产。
+- `EffectiveCritChance`: 局内与天赋暴击加成之和，限制在 0 至 60%；配置 5 表示 5%，累加值为 0.05。
 - `Stats.CritDamageMultiplierBonus`: 由 `CritDamage_Mul` 类升级累加（如 0.0 → 0.15 → 0.35）
 - 暴击基础倍率 1.5，即暴击时至少造成 150% 伤害
 
@@ -110,16 +112,22 @@ WaveXPMultiplier = 1.0f + Mathf.Min((WaveNumber - 1) * 0.04f, 0.4f)
 
 ### 2.4 玩家有效属性（运行时计算）
 
-```csharp
-EffectiveMaxHP       = (BaseMaxHP + FlatHPBonus) * (1.0f + PercentHPBonus)
-EffectiveMoveSpeed   = BaseMoveSpeed + FlatMoveSpeedBonus
-EffectivePickupRadius = BasePickupRadius + FlatPickupRangeBonus
-EffectiveDamageMultiplier = 1.0f + GlobalDamageMultiplier
-EffectiveAttackSpeedMultiplier = 1.0f + GlobalAttackSpeedMultiplier
-EffectiveExpMultiplier = 1.0f + ExpGainMultiplier
-EffectiveCritChance  = Mathf.Clamp(CritChanceBonus, 0.0f, 0.6f)
-EffectiveCritDamage  = 1.5f + CritDamageMultiplierBonus
+以下为计算表达式。Talent 表示开始对局时传入的 TalentBonuses 快照，局内升级不覆盖该快照。
+
+```text
+EffectiveMaxHP = (BaseMaxHP + FlatHPBonus + Talent.MaxHP) * (1 + PercentHPBonus)
+EffectiveMoveSpeed = BaseMoveSpeed + FlatMoveSpeedBonus
+EffectivePickupRadius = BasePickupRadius + FlatPickupRangeBonus + Talent.PickupRadius
+EffectiveDamageMultiplier = 1 + GlobalDamageMultiplier + Talent.Damage
+EffectiveAttackSpeedMultiplier = 1 + GlobalAttackSpeedMultiplier
+EffectiveExpMultiplier = 1 + ExpGainMultiplier
+EffectiveCritChance = Clamp(CritChanceBonus + Talent.CritChance, 0, 0.6)
+EffectiveCritDamage = 1.5 + CritDamageMultiplierBonus
+EffectiveWeaponRangeMultiplier = Max(0.1, 1 + Talent.WeaponRange)
+DamageTaken = Max(0, IncomingDamage) * (1 - Clamp(Talent.DamageReduction, 0, 0.75))
 ```
+
+基础生命 14、移速 5、拾取半径 3。免费重置与重新分配只改变局外进度，下一局重新生成属性快照。
 
 ---
 
@@ -264,37 +272,29 @@ public class UpgradeOption : ScriptableObject
 }
 ```
 
-### 4.4 PlayerStats — 玩家属性快照
+### 4.4 TalentBonuses — 本局天赋快照
+
+`PlayerStatsComponent` 管理局内升级；`MetaProgression.GetBonuses` 汇总天赋后，在重置玩家时通过 `SetTalentBonuses` 应用一次。
 
 ```csharp
-[System.Serializable]
-public struct PlayerStats
+public class TalentBonuses
 {
-    // 基础值 (角色决定)
-    public float BaseMaxHP;
-    public float BaseMoveSpeed;
-    public float BasePickupRadius;
-
-    // 升级累加值
-    public float FlatHPBonus;         // MaxHP_Add 累加
-    public float PercentHPBonus;      // MaxHP_Mul 累加 (0.0~)
-    public float GlobalDamageMultiplier;   // Damage_All_Mul 累加
-    public float GlobalAttackSpeedMultiplier; // AttackSpeed_All_Mul 累加
-    public float FlatMoveSpeedBonus;  // MoveSpeed_Add 累加
-    public float ExpGainMultiplier;   // ExpRate_Mul 累加
-    public float FlatPickupRangeBonus; // PickupRange_Add 累加
-    public float CritChanceBonus;     // CritChance_Add 累加
-    public float CritDamageMultiplierBonus; // CritDamage_Mul 累加
-
-    // 运行时状态
-    public int CurrentLevel;
-    public int WeaponSlotCount;       // 已填充武器槽数
+    public float Damage;
+    public float WeaponRange;
+    public float MaxHP;
+    public float DamageReduction;
+    public float PickupRadius;
+    public float CritChance;
 }
 ```
+
+节点、连线及成长规则定义在 `TalentGraph.cs`，实例内容在 `MageTalentGraph.json`；不以临时 PlayerStats 结构替代当前玩家组件。
 
 ---
 
 ## 5. 核心类设计
+
+本节为职责与接口摘要，省略完整实现；具体成员、签名与生命周期以 Assets/Scripts 源码为准。
 
 ### 5.1 PlayerController — 玩家控制器
 
@@ -318,19 +318,19 @@ public class PlayerController : MonoBehaviour
     private Vector2 _moveInput;
 
     // 方法
-    public bool AddWeapon(Weapon weapon);
+    public bool AddWeapon(WeaponDefinition def);
     public bool IsWeaponSlotFull();
     public int GetRemainingWeaponSlots();
     public void ApplyUpgrade(UpgradeOption option);
 
     // 受伤
-    public void TakeDamage(float damage);
+    // 伤害与生命由 StatsComponent.TakeDamage 处理
 
     // 初始化武器
-    private void SpawnStartingWeapon();
+    public void SpawnStartingWeapon();
 
     // 死亡
-    private void OnDeath();
+    public void OnPlayerDeath();
 }
 ```
 
@@ -342,10 +342,9 @@ public class PlayerController : MonoBehaviour
 public class PlayerStatsComponent : MonoBehaviour
 {
     [Header("基础属性 (可在 Inspector 覆写)")]
-    public float BaseMaxHP = 10f;
-    public float BaseMoveSpeed = 6f;
+    public float BaseMaxHP = 14f;
+    public float BaseMoveSpeed = 5f;
     public float BasePickupRadius = 3f;
-    public WeaponDefinition StartingWeapon;
 
     [Header("升级累加值")]
     public float FlatHPBonus;
@@ -372,6 +371,8 @@ public class PlayerStatsComponent : MonoBehaviour
     public float GetEffectiveExpMultiplier();
     public float GetEffectiveCritChance();
     public float GetEffectiveCritDamage();
+    public float GetEffectiveWeaponRangeMultiplier();
+    public void SetTalentBonuses(TalentBonuses bonuses);
 
     // === 升级 ===
     public void ApplyUpgrade(UpgradeOption option);
@@ -384,7 +385,6 @@ public class PlayerStatsComponent : MonoBehaviour
     public System.Action OnLevelUp;
     public System.Action OnDeath;
 
-    private void LevelUp();
 }
 ```
 
@@ -405,7 +405,7 @@ public abstract class Weapon : MonoBehaviour
     protected float AttackCooldown;
 
     // 初始化
-    public virtual void Initialize(PlayerController owner);
+    public virtual void Initialize(PlayerController owner, WeaponDefinition def);
 
     // 每帧调用
     protected virtual void Update();
@@ -418,7 +418,7 @@ public abstract class Weapon : MonoBehaviour
     protected virtual Enemy FindTarget();
 
     // 执行攻击
-    protected virtual void Fire(Enemy target);
+    protected abstract void Fire(Enemy target);
 
     // 判断是否可以攻击
     protected virtual bool CanAttack();
@@ -595,43 +595,19 @@ public class SpellOrbitWeapon : Weapon
 | OrbitSpeed | 180 (度/秒，即 2 秒一圈) |
 | MinWaveToAppear | 0 (初始可用) |
 
-### 5.7 Projectile / MagicBulletProjectile / OrbitProjectile — 投射物
+### 5.7 投射物 — 现有独立组件
 
-```csharp
-// 投射物基类
-public class Projectile : MonoBehaviour
-{
-    public float Damage;
-    public bool IsCrit;
-    public PlayerController OwnerPlayer;
-    public Vector3 Direction;
-    public float Speed;
-    public float Lifetime;
+当前没有统一的 Projectile 抽象基类，投射物分别继承 MonoBehaviour：
 
-    protected virtual void Update();
-    protected virtual void OnTriggerEnter(Collider other);
-    protected virtual void OnLifetimeExpired();
-}
+| 组件 | 当前行为 |
+|---|---|
+| MagicBulletProjectile | 初始化伤害、暴击、方向、速度和寿命；飞行与触发命中，寿命结束或命中后回池 |
+| OrbitProjectile | 按武器初始化环绕半径与速度；触发碰撞造成伤害，内部冷却 0.5 秒 |
+| FlameProjectile | 定义在 FlameThrowerWeapon.cs，承担纯视觉飞行；真实火焰伤害由武器扇形检测执行 |
 
-// 魔法弹投射物: 直线飞行，命中敌人或到达存活时间后销毁
-public class MagicBulletProjectile : Projectile
-{
-    protected override void OnTriggerEnter(Collider other);
-}
+三维 Collider / Rigidbody 机制保留，命中须满足 Playing 状态。魔法弹寿命和环绕半径在创建时应用本局天赋范围倍率。
 
-// 环绕飞弹: 绕玩家旋转，碰撞敌人造成伤害，有冷却
-public class OrbitProjectile : Projectile
-{
-    public float Angle;
-    public float Radius;
-    public Transform CenterTarget;
-    private Dictionary<Enemy, float> EnemyHitCooldowns = new Dictionary<Enemy, float>();
-    private float HitCooldownDuration;
-
-    public void UpdateOrbitPosition(float angle, float radius, Vector3 center);
-    protected override void OnTriggerEnter(Collider other);
-}
-```
+环绕伤害和暴击仍是初始化快照，因此本局之后选择的伤害升级不会动态更新已经生成的环绕弹；局外天赋在武器生成前应用，能正确进入该快照。这是当前实现限制，不是本轮新增功能。
 
 ### 5.8 Enemy — 敌人基类
 
@@ -766,186 +742,119 @@ else:
 ```csharp
 public class MonsterSpawner : MonoBehaviour
 {
-    [Header("生成区域")]
-    public float ArenaRadius = 30f;
-    public LayerMask SpawnAreaMask;
+    public float ArenaRadius = 28f; // SampleScene 序列化覆盖为 40
+    public float MinSpawnDistance = 13f;
+    public float SpawnMargin = 3f;
+    public List<EnemyDefinition> EnemyPrefabs;
+    public float BaseSpawnRate = 1f;
+    public float SpawnRateGrowthPerWave = 0.12f;
+    public float MaxSpawnRate = 4f;
 
-    [Header("配置")]
-    private WaveManager _waveManager;
-    private float _spawnTimer;
-
-    // 敌人预制体列表 (通过 Inspector 绑定)
-    public List<Enemy> EnemyPrefabs;
-
-    private void Update();
-    private void SpawnEnemy();
-    private Enemy PickEnemyType();
-    private Vector3 GetSpawnPosition();
-    private float GetSpawnInterval();
+    public float GetCurrentSpawnInterval();
+    public void ClearAllEnemies();
+    public void ResetSpawner();
 }
 ```
+
+仅在 Playing 且波次活跃时刷怪，按配置解锁敌人，通过 EnemyPool 创建或复用。
+生成点按随机方向计算相机视野外下限与地图圆边界上限，最多尝试 8 次；边缘无合法方向时有兜底点，不等同于固定 [13, 20] 环带。
 
 ### 5.12 WaveManager — 波次管理器
 
 ```csharp
 public class WaveManager : MonoBehaviour
 {
-    [Header("配置")]
-    public float WaveInterval = 20f;      // 每波持续时间
-    public float RestBetweenWaves = 1f;   // 波次间休息时间
-
-    [Header("状态")]
-    public int CurrentWave;
-    public float WaveTimer;
-    public bool IsWaveActive;
-    public float RestTimer;
-
-    // 事件
-    public System.Action<int> OnWaveChanged;
+    public float WaveInterval = 45f;
+    public float RestBetweenWaves = 3f; // 兼容原字段；SampleScene 为 1，商店期间不计时
+    public int CurrentWave { get; private set; }
+    public float WaveTimer { get; private set; }
+    public bool IsWaveActive { get; private set; }
+    public float RestTimer { get; private set; }
+    public event System.Action<int> OnWaveChanged;
 
     public void StartGame();
-
+    public void StartNextWave();
+    public void EndWave();
+    public void ResetGame();
     public float GetEnemyStatMultiplier();
     public float GetXPWaveMultiplier();
-    public bool IsWaveActiveFunc();
-
-    private void Update();
-    private void StartNextWave();
-    private void EndWave();
 }
 ```
 
-**波次时间线示例:**
+| 累计战斗时间 | 事件 |
+|---|---|
+| 0 秒 | 第 1 波，史莱姆可出现 |
+| 45 秒 | 第 1 波完成，暂停进入商店 |
+| 点击继续 | 第 2 波，下一轮 45 秒 |
+| 90 秒及之后点击继续 | 第 3 波，骷髅可出现 |
+| 第 4/6/8 波 | 蝙蝠、暗影法师、幽灵依次可出现 |
 
-| 时间 | 事件 |
-|------|------|
-| 0:00 | 游戏开始，波次 1 开始 |
-| 0:20 | 波次 1 结束，休息 1 秒 |
-| 0:21 | 波次 2 开始 (解锁骷髅) |
-| 0:41 | 波次 2 结束，休息 1 秒 |
-| 0:42 | 波次 3 开始 (解锁蝙蝠) |
-| ... | ... |
+时间不含商店、暂停与升级选择，不能据此给出固定墙钟解锁时间。
 
-### 5.13 GameManager — 游戏管理器
+### 5.13 GameManager — 对局协调
 
-```csharp
-public class GameManager : MonoBehaviour
-{
-    [Header("预制体")]
-    public PlayerController PlayerPrefab;
-    public GameObject LevelUpUIPrefab;
-    public GameObject MainHUDUIPrefab;
+状态为 MainMenu、Playing、Paused、LevelUp、GameOver、Shop。Awake 查找场景引用及载入局外存档，Start 进入主菜单；不在 Start 自动开局。
 
-    [Header("管理器")]
-    public WaveManager WaveManager;
-    public MonsterSpawner MonsterSpawner;
+主要接口：
 
-    [Header("UI")]
-    private GameObject _levelUpUIInstance;
-    private GameObject _mainHUDInstance;
-    private GameObject _gameOverUIInstance;
+| 接口 | 职责 |
+|---|---|
+| StartGame / RestartGame / ReturnToMainMenu | 开局、重开、返回；重开与返回先结算，再清理局内状态 |
+| PauseGame / ResumeGame | 状态切换，有待选升级时先处理队列 |
+| GameOver | 结算天赋奖励、清空待选升级、展示结果 |
+| AddKill / AddGold | 记录击杀与直接发放金币 |
+| OpenWaveShop / BuyHealing / ContinueFromShop | 波末商店、资格校验、下一波 |
+| OnPlayerLevelUp / OnUpgradeSelected | 连续升级排队，拒绝过期选择 |
+| Progression / TalentUI / ShopUI | 局外服务及运行时 UI 引用 |
 
-    // 数据表
-    private List<UpgradeOption> _upgradeOptions;
-    private List<WeaponDefinition> _weapons;
+当一局开始时生成唯一 ID，结束时通过 MetaProgression 记录并去重。ResetPlayer 分别重置局内加成并应用天赋快照，不修改基础资产。
 
-    // 暂停/恢复
-    public void PauseGame();
-    public void ResumeGame();
+### 5.14 LevelUpUI — 升级选择
 
-    // 游戏结束
-    public void GameOver();
+使用 Panel、Button[]、TextMeshProUGUI[]。ShowOptions 展示候选，Hide 关闭；点击后向玩家应用强化并通知 GameManager 处理下一项待选升级。
 
-    // 获取升级选项池
-    public List<UpgradeOption> GenerateUpgradeOptions(int count, int remainingWeaponSlots);
+生成候选的实际规则：
 
-    private void Start();
-    private void BindPlayerEvents();
-}
-```
-
-### 5.14 LevelUpUI — 升级选择界面
-
-```csharp
-public class LevelUpUI : MonoBehaviour
-{
-    // 三个选项按钮
-    public Button[] OptionButtons;
-    public Text[] OptionNames;
-    public Text[] OptionDescriptions;
-    public Image[] OptionIcons;
-
-    // 当前选项数据
-    private List<UpgradeOption> _currentOptions;
-
-    // 显示升级界面
-    public void ShowOptions(List<UpgradeOption> options);
-
-    // 选项选中回调
-    private void OnOptionSelected(int index);
-
-    // 关闭
-    public void Close();
-}
-```
-
-**升级选项生成算法:**
-
-```
-输入: Count (恒为3), RemainingWeaponSlots
-
-1. 从 UpgradeOptions 加载所有可用的 UpgradeOption
-2. 筛选 MinLevelToAppear <= 玩家当前等级
-3. 加载所有可用武器
-4. 筛选 MinWaveToAppear <= 当前波次 且 玩家尚未持有
-5. 武器选项数量 = Clamp(Random(1, Count), 1, RemainingWeaponSlots)
-6. 数值选项数量 = Count - 武器选项数量
-7. 从武器池随机选武器选项数量个
-8. 从数值池随机选数值选项数量个
-9. 随机打乱顺序返回
-```
+1. 从 UpgradeOptionPool 筛选满足 MinLevelToAppear 的选项。
+2. 武器类还需有剩余槽、WeaponDef 非空、达到 MinWaveToAppear，且尚未持有同类型。
+3. 对统一候选列表洗牌，返回最多 3 项；不强制“至少一个武器”或固定武器比例。
+4. 连续升级保留当前候选，选择完成后再生成下一组；死亡时清空待选队列。
 
 ### 5.15 MainHUD — 游戏 HUD
 
-```csharp
-public class MainHUD : MonoBehaviour
-{
-    [Header("HP")]
-    public Slider HPBar;
-    public Text HPText;
+HPBar、HPText、XPBar、LevelText、WaveText、WaveTimerText 展示局内属性。
+Rebind 在初次启用和重开时解绑旧引用再绑定玩家/波次事件，避免重复订阅。
+金币文字在运行时创建；金币变化和波次倒计时在 Update 中更新，不能把全部 HUD 行为描述为仅由事件驱动。
 
-    [Header("XP")]
-    public Slider XPBar;
-    public Text LevelText;
+### 5.16 WaveShopUI — 像素装备面板商店
 
-    [Header("波次")]
-    public Text WaveText;
-    public Text WaveTimerText;
+固定布局在 SampleScene 的现有 Canvas 下通过编辑器搭建，三个商品卡片复用 HealingCard Prefab；不再运行时创建布局。
+WaveShopUI 通过 SerializeField 绑定界面，Awake 绑定事件，Refresh 更新价格、生命、金币和购买状态；规则仍来自 GameManager。
+购买按钮支持悬停及键盘选中提示，点击调用 BuyHealing；继续按钮在 Inspector 中绑定 ContinueFromShop。
+另两个栏位为禁用的预留卡片，隐藏药水图标，未实现素材或存款商品。配置说明见 [商店 UI 编辑器维护指南](UIEditorGuide.md)。
 
-    [Header("武器槽")]
-    public Image[] WeaponSlots;
+### 5.17 局外成长 — 天赋图与存档
 
-    // 每帧更新
-    public void UpdateHP(float current, float max);
-    public void UpdateXP(float current, float toNext, int level);
-    public void UpdateWave(int waveNumber, float timeRemaining);
-    public void UpdateWeaponSlots(List<Weapon> weapons);
-}
-```
+TalentGraph 管理连接与配置校验，TalentEffectRegistry 注册效果处理器，
+MetaProgression 管理经验换点、资格校验、重置及存档，TalentGraphUI 仅展示与操作。
+
+法师首片区为 18 个可分配节点、33 级，伤害/范围/生存路线通过交汇节点连通。
+相邻节点 1 级即可解锁后续，不要求点满；支持免费重置并最终全部点满。
+配置、存档兼容与 mod 接入边界见 [天赋文档](MetaProgressionDesign.md)。
 
 ---
 
 ## 6. 敌人详细数值
 
-基础数值 × `EnemyStatMultiplier` = 最终属性
+生命与接触伤害受 EnemyStatMultiplier 缩放，Adaptive 模式再应用有限修正；移速只承受 30% 的波次增量；经验使用独立的波次经验倍率。下表为基础配置。
 
 | 敌人 | 波次解锁 | BaseHP | MoveSpeed | ContactDamage | BaseXP | 特点 |
 |------|---------|--------|-----------|---------------|--------|------|
-| 史莱姆 Slime | 1 | 8 | 2 | 1 | 3 | 慢速肉盾, 2 发魔法弹击杀 |
-| 骷髅 Skeleton | 2 | 14 | 3.5 | 2 | 5 | 标准近战, 2 发击杀 |
-| 蝙蝠 Bat | 3 | 5 | 4.5 | 1 | 2 | 快速脆皮群怪, 1 发击杀 |
-| 暗影法师 ShadowMage | 5 | 12 | 0 | 0 | 8 | 远程站桩, 发射弹幕 2s/次, 弹幕伤害 3 |
-| 幽灵 Ghost | 7 | 7 | 2.5 | 2 | 6 | 3s 冲刺一次, 冲刺速度 12, 持续 0.3s |
+| 史莱姆 Slime | 1 | 7 | 1.5 | 1 | 2 | 基础慢速近战 |
+| 骷髅 Skeleton | 3 | 12 | 2.7 | 1.5 | 4 | 标准近战 |
+| 蝙蝠 Bat | 4 | 5 | 3.6 | 1 | 2 | 快速低血量近战 |
+| 暗影法师 ShadowMage | 6 | 12 | 0 | 0 | 6 | 站桩远程，弹幕 3 秒/次、伤害 3、速度 6 |
+| 幽灵 Ghost | 8 | 7 | 2.2 | 2 | 5 | 冲刺冷却 4 秒、速度 9、持续 0.3 秒 |
 
 ---
 
@@ -959,8 +868,8 @@ public class MainHUD : MonoBehaviour
 | MaxHP_Mul | 生命增幅 | +{Value}% 最大生命值 | 15 | 每次升级固定 +15% 最大生命 |
 | Damage_All_Mul | 伤害增幅 | +{Value}% 所有伤害 | 10 | 每次升级固定 +10% 伤害 |
 | AttackSpeed_All_Mul | 急速 | +{Value}% 攻击速度 | 10 | 每次升级固定 +10% 攻速 |
-| MoveSpeed_Add | 敏捷 | +{Value} 移动速度 | 0.5 | 每次升级固定 +0.5 移速 |
-| ExpRate_Mul | 领悟 | +{Value}% 经验获取 | 15 | 每次升级固定 +15% 经验 |
+| MoveSpeed_Add | 敏捷 | +{Value} 移动速度 | 0.3 | 每次升级固定 +0.3 移速 |
+| ExpRate_Mul | 领悟 | +{Value}% 经验获取 | 10 | 每次升级固定 +10% 经验 |
 | PickupRange_Add | 磁力 | +{Value} 拾取范围 | 0.8 | 每次升级固定 +0.8 拾取范围 |
 | CritChance_Add | 精准 | +{Value}% 暴击率 | 5 | 每次升级固定 +5% 暴击率 (上限 60%) |
 | CritDamage_Mul | 致命 | +{Value}% 暴击伤害 | 20 | 每次升级固定 +20% 暴击伤害 |
@@ -981,76 +890,49 @@ public class MainHUD : MonoBehaviour
 
 ## 8. 游戏完整流程
 
+```text
+启动
+├── 初始化场景引用、局外存档、对象池与事件
+└── MainMenu（暂停，尚未开波）
+
+点击开始
+├── 重置局内等级、经验、金币、属性与玩家位置
+├── 应用天赋快照，创建初始武器
+└── Playing → 第 1 波
+
+Playing
+├── 战斗计时 / 波次倒计时
+├── 刷怪 → 自动攻击 → 命中与伤害
+├── 击杀：记录击杀、生成经验球、直接加金币、敌人回池
+└── 经验吸收一次后回池 → 连续升级进入待选队列
+
+LevelUp
+├── 保留当前选项，逐个选择并应用
+└── 队列清空 → Playing
+
+波次结束
+├── 记录一波完成 → Shop，冻结战斗对象
+├── 买治疗或跳过
+└── 点击继续 → 下一波
+
+死亡 / 重开 / 返回菜单
+├── 按对局 ID 结算一次天赋经验，保存并换取天赋点
+├── 死亡：GameOver 显示统计与奖励，清空升级队列
+└── 重开 / 返回：清理战斗对象并重置局内状态
+
+MainMenu 天赋图
+├── 连通节点投入点数 / 多级强化 / 免费重置
+├── 立即保存经验、点数和节点稳定 ID
+└── 下一局生效
 ```
-GameManager.Start()
-├── 创建 WaveManager
-├── 创建 MonsterSpawner (绑定 WaveManager)
-├── 创建 MainHUD
-├── 生成玩家 PlayerController
-│   ├── StatsComponent 初始化 (BaseMaxHP=10, ...)
-│   ├── Camera 初始化
-│   ├── 生成初始武器 MagicBulletWeapon
-│   └── 绑定输入
-└── WaveManager.StartGame()
-    └── StartNextWave() → 波次 1 开始
 
-游戏循环 (每帧 Update):
-├── WaveManager.Update()
-│   └── 波次倒计时 / 休息倒计时 → 波次切换 → 广播事件
-├── MonsterSpawner.Update()
-│   └── 波次活跃时按 SpawnRate 生成怪物
-├── PlayerController.Update()
-│   └── 输入处理 → 移动
-├── 每个 Weapon.Update()
-│   ├── 冷却递减
-│   ├── FindTarget()
-│   └── 冷却就绪 → Fire()
-├── 每个 Enemy.Update()
-│   ├── MoveTowardsPlayer()
-│   └── 特殊技能
-├── 每个 Projectile.Update()
-│   └── 飞行 → 命中判定
-├── XPOrb 检查磁吸
-└── HUD 更新
-
-怪物死亡:
-├── Enemy.OnDeath()
-├── 生成 XPOrb (ExpValue = Enemy.GetEffectiveXP())
-└── 销毁 Enemy
-
-经验球被拾取:
-├── XPOrb.OnTriggerEnter(Player)
-├── StatsComponent.AddXP(ExpValue * ExpMultiplier)
-├── 累积 XP >= XP_ToNextLevel?
-│   ├── 是 → LevelUp()
-│   │   ├── 增加 CurrentLevel
-│   │   ├── 重置 CurrentXP (溢出保留)
-│   │   └── GameManager.PauseGame() + 弹出升级界面
-│   └── 否 → 继续
-└── 销毁 XPOrb
-
-升级选择:
-├── GameManager.GenerateUpgradeOptions(3, RemainingSlots)
-├── LevelUpUI.ShowOptions()
-├── 玩家点击某选项
-├── OnOptionSelected()
-│   ├── 武器: PlayerController.AddWeapon()
-│   └── 数值: StatsComponent.ApplyUpgrade()
-├── GameManager.ResumeGame()
-└── 隐藏 LevelUpUI
-
-玩家死亡:
-├── PlayerController.OnDeath()
-├── GameManager.GameOver()
-│   ├── 显示结算 (存活波次、等级)
-│   └── 停止所有生成
-```
+实际战斗时间仅在 Playing 累计。暂停中的拾取、伤害及投射物碰撞不能继续产生战斗结果。天赋经验与局内经验、金币相互独立。
 
 ---
 
 ## 9. ScriptableObject 资产清单
 
-需在编辑器中创建的 ScriptableObject:
+现有 ScriptableObject 位于 Assets/Data；新增内容沿用以下资产类型：
 
 | 资产类型 | 说明 |
 |---------|------|
@@ -1065,10 +947,11 @@ GameManager.Start()
 | 属性 | 值 |
 |------|-----|
 | 形状 | 圆形 |
-| 半径 | 20 Unity 单位（场景配置，代码默认 28） |
+| 刷怪地图圆半径 | 40 Unity 单位（SampleScene；代码默认 28） |
 | 边界 | 暂无物理边界（规划中） |
-| 怪物生成位置 | 以玩家为中心的环形带 [13, 20]（视野外保底距离 13） |
-| 玩家起始位置 | 圆心 (0, 0, 0) |
+| 怪物生成位置 | 按方向计算视野外下限（兜底 13、边距 3）与地图圆边界上限；8 次尝试后使用兜底点 |
+| 玩家起始位置 | 启动时记录场景玩家位置，重开时恢复 |
+| 表现 | 正交相机、像素精灵、石砖网格与装饰柱；保留 Ground 碰撞 |
 
 ---
 
@@ -1094,7 +977,10 @@ GameManager.Start()
 
 | 系统 | 说明 |
 |------|------|
-| 武器进化 | 多个武器组合进化为更强武器 |
+| 组合联动与图鉴 | 保留材料并增加联动，首次选择永久点亮；图鉴悬停只显示材料，具体组合待定 |
+| 外围天赋与角色 | 法师首片区已实现，武器特色节点与其他角色待扩展 |
+| 素材与存款 | 波次商店的材料商品与限额跨局存款，未实现 |
+| mod / 创意工坊 | 已有天赋内容注册入口，外部文件发现与平台 SDK 未接入 |
 | 多角色 | 不同角色有不同初始武器和基础属性 |
 | 精英/Boss 波次 | 每 N 波出现 Boss/精英波 |
 | 武器专属升级 | 某个武器自身的伤害/攻速/范围加成选项 |
@@ -1104,7 +990,7 @@ GameManager.Start()
 ## 12. 关键设计原则
 
 - **从简优先**: 所有系统第一版保持最小可行设计，保留扩展接口 (virtual / ScriptableObject / 枚举扩展)
-- **数据驱动**: 武器、敌人、升级数值全部走 ScriptableObject，方便编辑器内调数值
+- **数据驱动**: 武器、敌人、局内升级使用 ScriptableObject；天赋节点、连线和成长规则使用 JSON 配置。
 - **Component 分离**: 玩家属性独立为 `PlayerStatsComponent`，武器和敌人逻辑各自内聚
-- **无魔法数字**: 所有可调数值暴露为 `[Header]` 或 Inspector 可编辑字段
+- **扩展边界**: 节点、连通校验、效果处理和存档分离；内容使用稳定 ID 与命名空间，兼容缺失内容。
 - **C# 为主**: 所有游戏逻辑在 C# 层实现，Editor 脚本仅用于编辑器扩展

@@ -1,208 +1,116 @@
-# BrotatoLike 🧙
+# BrotatoLike
 
-> Unity Top-Down 动作生存游戏 Demo — 类《Brotato》玩法  
-> **目标岗位**: 游戏客户端开发实习生 / Unity 客户端开发实习生
+Unity 俯视角动作生存游戏。玩家操控法师，自动攻击敌人，通过局内升级、波次间商店与局外天赋逐步成长。
 
----
-
-## 游戏截图
-
-
- ![主菜单](Screenshots/menu.png) 
- ![游戏进行中](Screenshots/gameplay.png) 
- ![升级界面](Screenshots/levelup.png) 
- ![暂停菜单](Screenshots/stop.png) 
- ![结算界面](Screenshots/gameover.png)
-
-
-
----
+文档更新：2026-10-12。当前版本使用 0x72 DungeonTileset II 像素美术，商店引入 Kenney Pixel Adventure CC0 素材并在编辑器中搭建，保留三维移动与物理机制。
 
 ## 快速开始
 
-### 环境要求
-
-| 工具 | 版本 |
-|------|------|
-| Unity | 6.5 (6000.5.4f1) |
-| 输入系统 | Input System Package |
-
-### 打开项目
+环境：Unity 6000.5.4f1、项目现有 Input System、TextMeshPro 和 uGUI。美术及截图由 Git LFS 管理。
 
 ```bash
-git clone <repo-url>
-# 用 Unity Hub 打开项目文件夹
-# 打开 Assets/Scenes/SampleScene.unity → 点击 Play
+git lfs install
+git clone https://github.com/yagumi0411/BrotatoLike_u3d.git
+cd BrotatoLike_u3d
+git lfs pull
 ```
 
-### 操作方式
+通过 Unity Hub 打开项目，打开 `Assets/Scenes/SampleScene.unity`，进入 Play 后点击“开始游戏”。项目启动先显示主菜单，不自动刷怪。
 
-| 操作 | 按键 |
-|------|------|
+| 操作 | 方式 |
+|---|---|
 | 移动 | WASD / 方向键 |
-| 暂停 / 继续 | ESC |
-| 选择升级选项 | 鼠标点击 |
+| 暂停、继续 | ESC |
+| 局内强化 | 鼠标选择升级选项 |
+| 商店 | 悬停购买按钮查看详情，点击购买或继续下一波 |
+| 天赋图 | 主菜单入口；拖拽移动、滚轮缩放、悬停查看、选中后投入点数 |
+| 天赋重置 | 天赋图内免费重置，下一局应用新分配 |
 
-### 游戏规则
+## 游戏循环
 
-1. 在圆形竞技场内生存，抵御无限波次的敌人
-2. 武器**自动攻击**范围内的敌人
-3. 击杀敌人掉落经验球，靠近自动拾取
-4. 升级时**暂停游戏**，从 3 个随机选项中选 1 个强化
-5. 死亡后显示结算：存活波次、等级、击杀数、存活时间
-6. 目标：活得越久越好
+1. 每波实际战斗 45 秒，武器自动攻击。
+2. 击杀掉落经验球，并直接获得 1 金币；金币无需拾取。
+3. 升级时暂停并选择强化，连续升级依次处理。
+4. 波末进入暂停的像素装备面板商店，药水 8 金币恢复 4 点生命，每波限购一次；手动继续下一波。
+5. 死亡、重开、返回菜单按本局表现结算独立的天赋经验，同一局只结算一次。
+6. 主菜单分配法师天赋，下一局生效；天赋进度跨局保存。
 
----
+有效对局需至少击杀 1 只怪物或战斗 15 秒。每局可以积累经验，前期较快获得天赋点，后期需要积累；即时退出无奖励。
 
-## 功能特性
+## 当前功能
 
-### 游戏系统
+| 系统 | 当前行为 |
+|---|---|
+| 美术 | 0x72 DungeonTileset II v1.7，2D 精灵与正交相机，保留 CharacterController / Rigidbody |
+| 武器 | 魔法弹、火焰喷射、飞弹环绕，最多 6 个武器槽 |
+| 敌人 | 史莱姆、骷髅、蝙蝠、暗影法师、幽灵，分别从第 1/3/4/6/8 波出现 |
+| 波次 | 45 秒实际战斗，敌人属性线性增长；商店、暂停、升级时冻结计时 |
+| 商店 | 编辑器搭建的三个商品卡片，左侧治疗药水，另两栏预留 |
+| 主菜单 / HUD | 开始游戏、天赋入口及进度；生命、局内经验、波次、等级、本局金币 |
+| 法师天赋 | 伤害、范围、生存路线，18 个可分配节点、33 级；相邻解锁、多级节点、免费重置、最终可全满 |
+| 难度模式 | 支持 Fixed / Adaptive，当前 SampleScene 使用 Fixed |
+| 重开与退出 | 清理上一局战斗对象；金币、局内等级和升级重置，局外天赋保留 |
 
-| 系统 | 说明 |
-|------|------|
-|  **3 种武器** | 魔法弹（单目标跟踪）、火焰喷射（扇形范围）、飞弹环绕（被动碰撞） |
-|  **5 种敌人** | 史莱姆、骷髅、蝙蝠、暗影法师（远程）、幽灵（冲刺） |
-|  **波次系统** | 20 秒/波 + 1 秒休息，敌人属性随波次指数增长 |
-|  **升级系统** | 9 种属性升级 + 新武器，算法自动生成 3 选 1 |
-|  **结算统计** | 波次、等级、击杀数、存活时间 |
-|  **暂停菜单** | 继续 / 重新开始 / 返回主菜单 |
-|  **地图选择** | 预留接口，后续可扩展多地图 |
+局内升级需求为 `24 + 14g + 3g²`，其中 `g = 等级 - 1`。首波基础刷怪约 1 只/秒，每波增加 0.12，上限 4；Adaptive 模式另乘难度倍率。
 
-### UI 界面
+## 实际界面预览
 
-| 界面 | 说明 |
-|------|------|
-| 主菜单 | 游戏标题 + 地图选择 + 开始游戏 |
-| 游戏 HUD | 血量条、经验条、波次倒计时、等级 |
-| 升级界面 | 暂停时弹出，3 个选项含武器属性和描述 |
-| 暂停菜单 | 半透明背景 + 三个操作按钮 |
-| 结算界面 | 完整统计 + 再来一次 / 返回主菜单 |
-| 伤害飘字 | 世界空间浮动数字，暴击橙红色 + `!` |
+![像素场景](Screenshots/dungeon_art_preview.png)
+![旧版货架式商店（新版编辑器布局截图待更新）](Screenshots/wave_shop_preview.png)
+![法师天赋图](Screenshots/mage_talent_graph_preview.png)
 
----
+天赋预览中的点数分配来自隔离测试存档。其他旧菜单、升级和结算截图保留在 Screenshots 中，未作为最新版本预览。
 
-## 技术架构
+## 模块与扩展
 
-### 整体设计
+| 目录 / 模块 | 职责 |
+|---|---|
+| `Assets/Scripts/Game` | 游戏状态、波次、刷怪、难度调节、对象池 |
+| `Assets/Scripts/Definitions`、`Assets/Data` | 武器、敌人和局内升级的 ScriptableObject 配置 |
+| `Assets/Scripts/Player`、`Weapons`、`Enemies`、`Projectiles` | 属性、移动、攻击、敌人行为与命中 |
+| `Assets/Scripts/Visuals` | 精灵切片、动画、朝向和竞技场表现 |
+| `Assets/Scripts/Progression` | 天赋图规则、效果注册、局外经验与存档 |
+| `Assets/Scripts/UI` | HUD、菜单、升级、商店与天赋图 |
+| `Assets/Resources/DungeonArt` | 图集、坐标、材质与资源说明 |
+| `Assets/Resources/Progression/MageTalentGraph.json` | 天赋节点、连线、效果 ID、经验规则 |
+| `Assets/Editor/DungeonArtSetup.cs` | 美术导入和场景适配工具 |
+| `tools/verification/MetaProgressionVerification.cs` | 隔离场景天赋验证入口 |
 
-```
-数据层 (ScriptableObject)
-    ↓
-逻辑层 (MonoBehaviour Components)
-    ↓
-表现层 (UI / VFX / 伤害数字)
-```
+游戏状态包括 MainMenu、Playing、Paused、LevelUp、GameOver、Shop。伤害、刷怪、攻击与经验吸收受 Playing 状态约束。
 
-### 核心架构模式
+武器、敌人和局内升级通过 ScriptableObject 调整；天赋通过 JSON 图配置和效果注册扩展。天赋节点、连线、资格校验、效果及存档分离，稳定 ID 不依赖显示名称或列表位置。
 
-| 模式 | 应用 |
-|------|------|
-| **数据驱动** | 武器、敌人、升级全部通过 ScriptableObject 配置，数值调整无需改代码 |
-| **Component 分离** | 玩家属性独立为 `PlayerStatsComponent`，武器和敌人逻辑各自内聚 |
-| **状态机** | `GameManager.EGameState` 统一管理 5 种游戏状态（主菜单/游戏中/暂停/升级/结算） |
-| **事件驱动 UI** | HUD 通过事件监听（`OnHPChanged` / `OnXPChanged`），不轮询 |
-| **抽象基类** | `Weapon` 基类提供通用流程，子类只需实现 `Fire()` |
+敌人、魔法弹和经验球采用对象池；火焰的基础粒子分支池化，VFX 分支仍创建临时对象。索敌使用敌人注册表、目标缓存与蓄水池采样，避免建立随机候选列表；不宣称整个战斗过程零分配。
 
-### 性能优化
+## 局外存档与验证
 
-| 优化 | 说明 |
-|------|------|
-| **敌人注册表** | 敌人出生/死亡时 O(1) 注册注销，索敌遍历注册表 + 缓存目标，替代 `FindObjectsByType` 全场景扫描，查询零 GC 分配 |
-| **对象池** | 敌人、子弹、经验球、火焰粒子四类高频对象全部池化复用，消除运行时 Instantiate/Destroy |
-| **蓄水池采样** | 随机索敌单遍均匀采样，避免收集列表分配 |
-| **平方距离比较** | 索敌/拾取用 `sqrMagnitude` 替代 `Vector3.Distance`，省去开方 |
+存档：`Application.persistentDataPath/meta_progression_v1.json`，结算与分配后立即保存，保留 `.bak`。局内金币不跨局；天赋经验、点数和分配跨局保存。
 
-### 项目结构
+已完成的隔离验证记录：57 项游戏闭环检查、53 项天赋专项检查，属于 2026-10-11 版本。2026-10-12 编辑器版商店由用户确认基本接入及显示正常，当前运行时代码编译通过（0 错误、4 条既有过时 API 警告）；完整购买流程尚未重新逐项记录，本次文档同步未重新运行游戏测试。
 
-```
-Assets/
-├── Scripts/
-│   ├── GameTypes.cs              ← 核心枚举定义
-│   ├── Definitions/              ← ScriptableObject 定义
-│   ├── Game/                     ← 游戏管理器
-│   │   ├── GameManager.cs        ← 全局状态机
-│   │   ├── WaveManager.cs        ← 波次推进
-│   │   └── MonsterSpawner.cs     ← 怪物生成
-│   ├── Player/                   ← 玩家系统
-│   ├── Weapons/                  ← 武器系统（基类 + 3 种实现）
-│   ├── Projectiles/              ← 投射物
-│   ├── Enemies/                  ← 敌人系统（基类 + 5 种实现）
-│   └── UI/                       ← UI 界面（6 个界面脚本）
-├── Data/                         ← ScriptableObject 资产
-│   ├── Weapons/                  ← 3 个武器配置
-│   ├── Enemies/                  ← 5 个敌人配置
-│   └── Upgrades/                 ← 10 个升级选项配置
-└── Scenes/
-    └── SampleScene.unity         ← 游戏场景（含 Canvas + 所有 UI）
-```
+测试输出位于本机 `Logs`，隔离项目位于 `Temp`，两者不纳入版本库，Unity 可能清理 Temp。专项验证脚本要求隔离项目及独立存档身份，不能直接在正式项目执行。
 
-### 游戏状态机
+## 文档
 
-```
-MainMenu ──"开始游戏"──→ Playing ──"ESC"──→ Paused
-   ↑                       │   ↑              │
-   │    "返回主菜单"        │   └──"ESC"───────┘
-   │                       │   "继续"
-   │                       ├── LevelUp (升级弹出)
-   │                       ├── 死亡 ──→ GameOver
-   │                       │              │
-   └───────"返回主菜单" ←──┘              │
-                                           ├──"再来一次"──→ Playing
-                                           └──"返回主菜单"──→ MainMenu
-```
+- [核心设计与数值](Docs/GameCoreDesign.md)
+- [当前实现与扩展指南](Docs/ImplementationGuide.md)
+- [像素美术适配](Docs/ArtAdaptation.md)
+- [金币与波次商店](Docs/GoldAndWaveShopDesign.md)
+- [商店 UI 编辑器维护指南](Docs/UIEditorGuide.md)
+- [局外成长与法师天赋图](Docs/MetaProgressionDesign.md)
+- [组合与图鉴规划](Docs/ComboAndCollectionDesign.md)
+- [历史变更记录](Docs/CHANGELOG.md)
 
----
+## 后续方向
 
-## 技术栈
+- 组合联动和永久图鉴：保留材料、增加联动；首次选择后点亮，图鉴悬停只显示材料。
+- 商店素材商品、限额跨局存款。
+- 武器特色外围天赋、更多初始角色与片区。
+- 外部 mod 内容发现、版本和依赖校验、创意工坊 SDK 接入。
+- 新武器、精英/Boss、音效与竞技场物理边界。
 
-| 技术 | 用途 |
-|------|------|
-| **Unity 6.5 (6000.5.4f1)** | 游戏引擎 |
-| **C#** | 全部游戏逻辑 |
-| **Input System Package** | WASD 移动 + 鼠标瞄准 |
-| **TextMeshPro** | UI 文字渲染 |
-| **ScriptableObject** | 数据驱动配置 |
-| **UI Toolkit / uGUI** | 游戏界面 |
+上述内容尚未实现或尚未确定细节，不属于当前版本功能。
 
----
+## 美术许可
 
-## 设计文档
-
-项目设计细节见 `Docs/GameCoreDesign.md`，包含：
-
-- 完整的数值公式（伤害计算、经验曲线、波次缩放）
-- 类设计与 API 定义
-- ScriptableObject 规格
-- 敌人和升级的详细数值表
-
-结构变更记录见 `Docs/CHANGELOG.md`。
-
----
-
-## 面试展示亮点
-
-| 亮点 | 说明 |
-|------|------|
-| **数据驱动架构** | 所有游戏数值走 ScriptableObject，策划可独立调参 |
-| **Component 分离设计** | `PlayerStatsComponent` 独立负责属性，职责单一 |
-| **性能意识** | 敌人注册表 + 四类对象池，高频路径零 GC 分配，体现对 GC 的关注 |
-| **完整游戏流程** | 主菜单 → 游戏 → 暂停 → 升级 → 结算 → 重新开始，闭环完整 |
-| **可扩展架构** | 抽象 Weapon 基类 + virtual 方法，新增武器只需实现 Fire() |
-| **事件驱动 UI** | 避免每帧轮询，通过事件监听数据变化 |
-
----
-
-## 后续规划
-
-- [ ] 新武器：冰锥（穿透）、闪电链（连锁）、毒雾（地面 AoE）
-- [ ] 精英怪 / Boss 波次
-- [ ] 多角色选择
-- [ ] 音效系统
-- [ ] 武器进化系统
-- [ ] 编辑器工具脚本（数据检查器、竞技场辅助线）
-
----
-
-## 许可证
-
-本项目仅用于求职 Demo 展示。
+本项目用于游戏 Demo 展示。0x72 DungeonTileset II 美术采用 CC0，来源与许可说明见 [CREDITS](Assets/Resources/DungeonArt/CREDITS.txt)。项目自身代码未新增许可授权。
