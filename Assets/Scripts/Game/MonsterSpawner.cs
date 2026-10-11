@@ -9,6 +9,10 @@ public class MonsterSpawner : MonoBehaviour
     [Tooltip("怪物刷出点相对屏幕边缘的额外距离（世界单位）：各方向下限 = 该方向穿出视野的距离 + 该值")]
     public float SpawnMargin = 3f;
     public System.Collections.Generic.List<EnemyDefinition> EnemyPrefabs;
+    [Header("刷怪节奏")]
+    [Min(0.1f)] public float BaseSpawnRate = 1f;
+    [Min(0f)] public float SpawnRateGrowthPerWave = 0.12f;
+    [Min(0.1f)] public float MaxSpawnRate = 4f;
 
     private WaveManager _waveManager;
     private float _spawnTimer;
@@ -20,6 +24,7 @@ public class MonsterSpawner : MonoBehaviour
 
     private void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         if (_waveManager == null || !_waveManager.IsWaveActive)
             return;
 
@@ -34,7 +39,9 @@ public class MonsterSpawner : MonoBehaviour
 
     private float GetSpawnInterval()
     {
-        float baseInterval = 1f / (2f + _waveManager.CurrentWave * 0.4f);
+        float spawnRate = Mathf.Clamp(BaseSpawnRate + Mathf.Max(0, _waveManager.CurrentWave - 1) * SpawnRateGrowthPerWave,
+            0.1f, Mathf.Max(0.1f, MaxSpawnRate));
+        float baseInterval = 1f / spawnRate;
         float multiplier = GameManager.Instance?.DifficultyManager?.GetSpawnRateMultiplier() ?? 1f;
         return Mathf.Max(0.08f, baseInterval / multiplier);
     }
@@ -86,7 +93,10 @@ public class MonsterSpawner : MonoBehaviour
         for (int i = enemies.Count - 1; i >= 0; i--)
         {
             if (enemies[i] != null)
+            {
+                enemies[i].gameObject.SetActive(false);
                 Destroy(enemies[i].gameObject);
+            }
         }
     }
 

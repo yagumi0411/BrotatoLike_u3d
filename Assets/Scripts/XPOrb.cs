@@ -47,6 +47,7 @@ public class XPOrb : MonoBehaviour
 
     private void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         var player = GameManager.Instance?.Player;
         if (player == null) return;
 
@@ -73,7 +74,11 @@ public class XPOrb : MonoBehaviour
 
     private void Absorb(PlayerController player)
     {
-        player.StatsComponent.AddXP(ExpValue);
+        if (!gameObject.activeInHierarchy || ExpValue <= 0f || GameManager.Instance == null ||
+            GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
+        float value = ExpValue;
+        ExpValue = 0f;
+        player.StatsComponent.AddXP(value);
         Pool.Release(gameObject);   // 回池复用（替代 Destroy）
     }
 
@@ -91,6 +96,7 @@ public class XPOrb : MonoBehaviour
         var orbs = FindObjectsByType<XPOrb>(FindObjectsSortMode.None);
         foreach (var orb in orbs)
         {
+            orb.gameObject.SetActive(false);
             Destroy(orb.gameObject);
         }
     }
@@ -111,6 +117,9 @@ public class XPOrb : MonoBehaviour
         orb.transform.localScale = Vector3.one * 0.3f;
         orb.GetComponent<Renderer>().material.color = Color.blue;
         orb.AddComponent<XPOrb>();
+        if (DungeonArt.CreateActor(orb.transform, "coin_anim_f", "coin_anim_f", 1f,
+            new Color(0.65f, 0.9f, 1f), -0.1f))
+            orb.GetComponent<Renderer>().enabled = false;
         return orb;
     }
 }

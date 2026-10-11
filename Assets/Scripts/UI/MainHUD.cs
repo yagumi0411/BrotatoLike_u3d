@@ -18,36 +18,40 @@ public class MainHUD : MonoBehaviour
 
     private PlayerController _player;
     private WaveManager _waveManager;
+    private TextMeshProUGUI _goldText;
+    private int _lastGold = -1;
 
     private void Start()
     {
-        _player = GameManager.Instance?.Player;
-        _waveManager = GameManager.Instance?.WaveManager;
-
-        if (_player == null || _waveManager == null)
-        {
-            Debug.LogWarning("MainHUD: 未能找到玩家或波次管理器");
-            return;
-        }
-
-        // 绑定事件
-        _player.StatsComponent.OnHPChanged += UpdateHP;
-        _player.StatsComponent.OnXPChanged += UpdateXP;
-        _waveManager.OnWaveChanged += UpdateWave;
-
-        // 初始更新
-        UpdateHP(_player.StatsComponent.CurrentHP, _player.StatsComponent.GetEffectiveMaxHP());
-        UpdateXP(_player.StatsComponent.CurrentXP, _player.StatsComponent.GetXPToNextLevel(), _player.StatsComponent.CurrentLevel);
-        UpdateWave(_waveManager.CurrentWave);
+        Rebind();
+        var goldObject = new GameObject("GoldText", typeof(RectTransform));
+        goldObject.transform.SetParent(transform, false);
+        var rect = goldObject.GetComponent<RectTransform>();
+        rect.anchorMin = rect.anchorMax = Vector2.one;
+        rect.pivot = Vector2.one;
+        rect.anchoredPosition = new Vector2(-25f, -25f);
+        rect.sizeDelta = new Vector2(220f, 45f);
+        _goldText = goldObject.AddComponent<TextMeshProUGUI>();
+        _goldText.font = HPText != null ? HPText.font : TMP_Settings.defaultFontAsset;
+        _goldText.fontSize = 28;
+        _goldText.alignment = TextAlignmentOptions.Right;
+        _goldText.color = new Color(1f, 0.8f, 0.25f);
+        _goldText.raycastTarget = false;
     }
 
     private void Update()
     {
+        int gold = GameManager.Instance?.Gold ?? 0;
+        if (_goldText != null && gold != _lastGold)
+        {
+            _goldText.text = $"金币：{gold}";
+            _lastGold = gold;
+        }
         if (_waveManager == null) return;
 
         if (_waveManager.IsWaveActive)
         {
-            WaveTimerText.text = $"left {Mathf.Ceil(_waveManager.WaveTimer)}s";
+            WaveTimerText.text = $"剩余 {Mathf.Max(0, Mathf.Ceil(_waveManager.WaveTimer))} 秒";
         }
         else
         {

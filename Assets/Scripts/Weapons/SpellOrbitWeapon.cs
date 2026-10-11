@@ -33,7 +33,7 @@ public class SpellOrbitWeapon : Weapon
             }
 
             var orbitProj = orb.AddComponent<OrbitProjectile>();
-            orbitProj.Initialize(this, CalculateDamage(), RollCrit(), WeaponDef.OrbitRadius, WeaponDef.OrbitSpeed, i, WeaponDef.OrbitCount);
+            orbitProj.Initialize(this, CalculateDamage(), RollCrit(), WeaponDef.OrbitRadius * OwnerPlayer.StatsComponent.GetEffectiveWeaponRangeMultiplier(), WeaponDef.OrbitSpeed, i, WeaponDef.OrbitCount);
             _orbitProjectiles.Add(orbitProj);
         }
     }

@@ -44,6 +44,7 @@ public class FlameThrowerWeapon : Weapon
 
     protected override void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         // 基类 Update：攻击冷却 → FindTarget → Fire() 发射视觉粒子
         base.Update();
 

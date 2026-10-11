@@ -64,6 +64,7 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         HandleInput();
         UpdateMovementVector();
         ApplyMovement();
@@ -173,6 +174,13 @@ public class PlayerController : MonoBehaviour
     {
         if (!AutoCreateVisual) return;
 
+        if (DungeonArt.CreateActor(transform, "wizzard_m_idle_anim_f", "wizzard_m_run_anim_f",
+            1.25f, Color.white))
+        {
+            StatsComponent.OnDamageTaken += OnVisualDamage;
+            return;
+        }
+
         if (transform.Find("PlayerVisual") != null) return;
 
         GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Capsule);
@@ -187,6 +195,17 @@ public class PlayerController : MonoBehaviour
         {
             visual.GetComponent<Renderer>().material = PlayerMaterial;
         }
+    }
+
+    private void OnVisualDamage(float damage)
+    {
+        var visual = GetComponentInChildren<DungeonSpriteVisual>();
+        if (visual != null) visual.Flash();
+    }
+
+    private void OnDestroy()
+    {
+        if (StatsComponent != null) StatsComponent.OnDamageTaken -= OnVisualDamage;
     }
 
     public bool AddWeapon(WeaponDefinition weaponDef)

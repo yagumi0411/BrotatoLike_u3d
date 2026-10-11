@@ -37,7 +37,11 @@ public class GameOverUI : MonoBehaviour
         {
             int minutes = Mathf.FloorToInt(playTimeSeconds / 60f);
             int seconds = Mathf.FloorToInt(playTimeSeconds % 60f);
-            TimeResultText.text = $"存活时间: {minutes}分{seconds}秒";
+            var reward = GameManager.Instance?.Progression?.LastReward;
+            TimeResultText.enableAutoSizing = true;
+            TimeResultText.fontSizeMin = 16f;
+            string progression = reward != null ? $"\n天赋经验 +{reward.XP}    天赋点 +{reward.Points}" : "";
+            TimeResultText.text = $"存活时间: {minutes}分{seconds}秒{progression}";
         }
     }
 

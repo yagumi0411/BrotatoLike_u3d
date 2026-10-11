@@ -34,6 +34,12 @@ public class MagicBulletProjectile : MonoBehaviour
 
     private void CreateVisual()
     {
+        if (DungeonArt.CreateActor(transform, "coin_anim_f", "coin_anim_f", 0.85f,
+            new Color(0.4f, 0.8f, 1f), -0.1f))
+        {
+            GetComponent<Renderer>().enabled = false;
+            return;
+        }
         // 主体：蓝色发光球
         VisualHelper.CreateVisual(PrimitiveType.Sphere, transform, "Core",
             Vector3.zero, Vector3.one * 0.25f, new Color(0.4f, 0.8f, 1f));
@@ -54,6 +60,7 @@ public class MagicBulletProjectile : MonoBehaviour
 
     private void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         transform.position += Direction * Speed * Time.deltaTime;
 
         // 寿命倒计时（替代 Start 的 Destroy 定时器，池化复用后依然有效）
@@ -94,6 +101,8 @@ public class MagicBulletProjectile : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        if (!gameObject.activeInHierarchy || GameManager.Instance == null ||
+            GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         if (other.TryGetComponent<Enemy>(out var enemy))
         {
             enemy.ReceiveDamage(Damage, IsCrit);

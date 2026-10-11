@@ -15,9 +15,9 @@ MonoBehaviour:
   Type: 4
   Name: 
   BaseHP: 7
-  MoveSpeed: 2.5
+  MoveSpeed: 2.2
   ContactDamage: 2
-  BaseXP: 6
+  BaseXP: 5
   CollisionRadius: 0.5
   MeshScale: 1
   bIsRanged: 0
@@ -25,7 +25,7 @@ MonoBehaviour:
   ProjectileDamage: 3
   ProjectileSpeed: 8
   bCanDash: 1
-  DashCooldown: 3
-  DashSpeed: 12
+  DashCooldown: 4
+  DashSpeed: 9
   DashDuration: 0.3
-  MinWaveToSpawn: 7
+  MinWaveToSpawn: 8

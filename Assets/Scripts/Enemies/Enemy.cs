@@ -27,7 +27,7 @@ public abstract class Enemy : MonoBehaviour
         OwnerPlayer = GameManager.Instance?.Player;
         SetupCollider();
         IgnorePlayerCollision();
-        CreateVisual();
+        if (!DungeonArt.CreateEnemy(this)) CreateVisual();
 
         // 注册进索敌注册表（替代 FindObjectsByType 全场景扫描）
         EnemyRegistry.Register(this);
@@ -89,6 +89,8 @@ public abstract class Enemy : MonoBehaviour
 
     public virtual void ReceiveDamage(float damage, bool isCrit = false)
     {
+        if (CurrentHP <= 0f || GameManager.Instance == null ||
+            GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         if (isCrit)
         {
             float critDamage = damage * OwnerPlayer.StatsComponent.GetEffectiveCritDamage();
@@ -99,6 +101,8 @@ public abstract class Enemy : MonoBehaviour
         DamagePopup.Spawn(transform.position, damage, isCrit);
 
         CurrentHP -= damage;
+        var visual = GetComponentInChildren<DungeonSpriteVisual>();
+        if (visual != null) visual.Flash();
         if (CurrentHP <= 0)
         {
             OnDeath();
@@ -113,6 +117,7 @@ public abstract class Enemy : MonoBehaviour
         // 生成经验球
         float xp = GetEffectiveXP();
         XPOrb.Spawn(transform.position, xp);
+        GameManager.Instance.AddGold(Mathf.Max(1, GameManager.Instance.GoldPerKill));
 
         // 回收到对象池（替代 Destroy，消除 Instantiate/Destroy 的 GC）
         EnemyPool.Release(this);
@@ -120,6 +125,7 @@ public abstract class Enemy : MonoBehaviour
 
     protected virtual void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         MoveTowardsPlayer();
         CheckContactDamage();
     }
@@ -139,6 +145,7 @@ public abstract class Enemy : MonoBehaviour
 
     private void CheckContactDamage()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         if (OwnerPlayer == null || EnemyDef.ContactDamage <= 0f) return;
 
         float dist = Vector3.Distance(transform.position, OwnerPlayer.transform.position);

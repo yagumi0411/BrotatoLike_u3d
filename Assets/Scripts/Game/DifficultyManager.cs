@@ -28,9 +28,9 @@ public class DifficultyManager : MonoBehaviour
     [Range(0f, 1f)] public float IncreasePressureThreshold = 0.35f;
 
     [Header("波次目标值（后续按试玩日志校准）")]
-    [Min(0.01f)] public float BaseKillsPerSecondTarget = 1.2f;
-    [Min(0.01f)] public float BaseXPPerSecondTarget = 3f;
-    [Min(0f)] public float TargetGrowthPerWave = 0.08f;
+    [Min(0.01f)] public float BaseKillsPerSecondTarget = 0.7f;
+    [Min(0.01f)] public float BaseXPPerSecondTarget = 1.5f;
+    [Min(0f)] public float TargetGrowthPerWave = 0.04f;
 
     public float CurrentMultiplier { get; private set; } = 1f;
     public float LastPressureScore { get; private set; } = 0.5f;

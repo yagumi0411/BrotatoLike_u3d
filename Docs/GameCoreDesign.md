@@ -30,6 +30,28 @@ Top-down 2.5D 动作生存游戏。玩家控制一名法师，在封闭竞技场
 | 数据驱动 | ScriptableObject 驱动武器/敌人/升级配置 |
 | 架构模式 | Component-based ECS + OOP 混合 |
 
+### 1.4 后续玩法方向（规划，尚未实现）
+
+后续以发现、搭配和收集 combo 为核心：保留原材料并增加联动效果，
+通过升级选择激活组合，首次选择后永久点亮图鉴。
+图鉴初始显示黑色剪影，鼠标悬停只显示组合所需材料，不展示效果。
+首批组合名单、配方与效果尚未确定。
+完整规则及待定内容见 [武器联动与组合图鉴设计](ComboAndCollectionDesign.md)。
+
+### 1.5 金币与波次间商店（第一版）
+
+击杀怪物直接获得金币，波次结束暂停战斗并打开商店。
+当前仅支持购买治疗或继续下一波；素材商品与跨局限额存款暂缓。
+详细规则、默认数值及验证方式见 [金币与波次间商店](GoldAndWaveShopDesign.md)。
+
+### 1.6 局外成长与法师天赋图
+
+有效对局结束获得独立的天赋经验，逐步换取可分配天赋点。主菜单的天赋图以相邻连通规则分配，
+首片区包含伤害、范围、生存路线及交汇节点，部分节点多级，支持免费重置并最终全部点满。
+死亡、重开、返回菜单均按本局表现结算一次，分配结果跨局保存，下一局开始时生效。
+节点、连线、经验规则和效果 ID 使用独立配置，为后续片区及 mod 内容注册预留入口。
+完整规则和验证记录见 [局外成长与法师天赋图](MetaProgressionDesign.md)。
+
 ---
 
 ## 2. 核心数值公式
@@ -54,35 +76,37 @@ else:
 ### 2.2 经验值与升级
 
 ```csharp
-XP_ToNextLevel(CurrentLevel) = 8 * (CurrentLevel + 1)
+g = Mathf.Max(0, CurrentLevel - 1)
+XP_ToNextLevel(CurrentLevel) = 24 + 14 * g + 3 * g * g
 
 EffectiveXP = Enemy.BaseXP * (1.0f + Stats.ExpGainMultiplier) * WaveXPMultiplier
 ```
 
 | 当前等级 | 升到下一级所需 XP |
 |----------|-------------------|
-| 1 | 16 |
-| 2 | 24 |
-| 3 | 32 |
-| 5 | 48 |
-| 10 | 88 |
-| N | 8 × (N + 1) |
+| 1 | 24 |
+| 2 | 41 |
+| 3 | 64 |
+| 5 | 128 |
+| 10 | 393 |
+| N | 24 + 14 × (N - 1) + 3 × (N - 1)² |
 
 ```csharp
-WaveXPMultiplier = 1.0f + (WaveNumber - 1) * 0.1f
+WaveXPMultiplier = 1.0f + Mathf.Min((WaveNumber - 1) * 0.04f, 0.4f)
 ```
 
 ### 2.3 波次缩放
 
 ```csharp
-WaveInterval = 20 秒（波次间休息 1 秒）
+WaveInterval = 45 秒（波末商店暂停，手动继续下一波）
 
-EnemyStatMultiplier = 1.06^(WaveNumber - 1)  // 温和指数增长，前期平缓后期陡峭
-SpawnRate = 2.0f + WaveNumber * 0.4f  // 每秒生成怪物数
-WaveXPMultiplier = 1.0f + (WaveNumber - 1) * 0.1f
+EnemyStatMultiplier = 1.0f + (WaveNumber - 1) * 0.035f
+SpawnRate = Mathf.Min(1.0f + (WaveNumber - 1) * 0.12f, 4.0f)
+WaveXPMultiplier = 1.0f + Mathf.Min((WaveNumber - 1) * 0.04f, 0.4f)
 ```
 
-波次 1 = 基准，波次越高敌人越强、越多、经验也越多（但经验增速慢于血量增速 → 后期更难）。
+波次 1 = 基准，刷怪率上限是基础值；启用自适应难度时另乘其刷怪倍率。经验倍率最高 1.4。
+玩家初始生命 14、移速 5；骷髅、蝙蝠、暗影法师、幽灵分别从第 3、4、6、8 波出现。
 
 ### 2.4 玩家有效属性（运行时计算）
 

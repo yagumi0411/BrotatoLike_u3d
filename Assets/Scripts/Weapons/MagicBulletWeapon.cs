@@ -38,6 +38,6 @@ public class MagicBulletWeapon : Weapon
         projectile.Initialize(damage, isCrit, OwnerPlayer,
             (targetPos - bullet.transform.position).normalized,
             WeaponDef.ProjectileSpeed,
-            WeaponDef.ProjectileLifetime);
+            WeaponDef.ProjectileLifetime * OwnerPlayer.StatsComponent.GetEffectiveWeaponRangeMultiplier());
     }
 }

@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class WaveManager : MonoBehaviour
 {
-    public float WaveInterval = 30f;
+    public float WaveInterval = 45f;
     public float RestBetweenWaves = 3f;
 
     public int CurrentWave { get; private set; }
@@ -20,6 +20,8 @@ public class WaveManager : MonoBehaviour
 
     private void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing)
+            return;
         if (IsWaveActive)
         {
             WaveTimer -= Time.deltaTime;
@@ -48,8 +50,10 @@ public class WaveManager : MonoBehaviour
 
     public void EndWave()
     {
+        if (!IsWaveActive) return;
         IsWaveActive = false;
         RestTimer = RestBetweenWaves;
+        GameManager.Instance?.OpenWaveShop();
     }
 
     public void ResetGame()
@@ -60,6 +64,6 @@ public class WaveManager : MonoBehaviour
         RestTimer = 0f;
     }
 
-    public float GetEnemyStatMultiplier() => Mathf.Pow(1.06f, CurrentWave - 1);
-    public float GetXPWaveMultiplier() => 1f + (CurrentWave - 1) * 0.1f;
+    public float GetEnemyStatMultiplier() => 1f + Mathf.Max(0, CurrentWave - 1) * 0.035f;
+    public float GetXPWaveMultiplier() => 1f + Mathf.Min(Mathf.Max(0, CurrentWave - 1) * 0.04f, 0.4f);
 }

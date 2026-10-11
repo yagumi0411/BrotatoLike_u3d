@@ -13,7 +13,8 @@ public class GameManager : MonoBehaviour
         Playing,
         Paused,
         LevelUp,
-        GameOver
+        GameOver,
+        Shop
     }
 
     public EGameState CurrentState { get; private set; } = EGameState.MainMenu;
@@ -23,6 +24,17 @@ public class GameManager : MonoBehaviour
     public MonsterSpawner MonsterSpawner { get; private set; }
     public PlayerController Player { get; private set; }
     public DifficultyManager DifficultyManager { get; private set; }
+    public WaveShopUI ShopUI { get; private set; }
+    public MetaProgression Progression { get; private set; }
+    public TalentGraphUI TalentUI { get; private set; }
+
+    [Header("金币与商店")]
+    [Min(1)] public int GoldPerKill = 1;
+    [Min(1)] public int HealingCost = 8;
+    [Min(1f)] public float HealingAmount = 4f;
+    public int Gold { get; private set; }
+    public bool HealingPurchased { get; private set; }
+    public event System.Action<int> OnGoldChanged;
 
     // === UI 组件（由你在 Inspector 中拖拽） ===
     [Header("UI 组件")]
@@ -55,10 +67,13 @@ public class GameManager : MonoBehaviour
     private Vector3 _playerStartPosition;
     private Vector3 _playerStartRotation;
     private int _pendingLevelUps;
+    private string _runId;
+    private int _completedWaves;
 
     private void Awake()
     {
         Instance = this;
+        Progression = MetaProgression.CreateDefault();
 
         // 清空上一局残留的注册表/池（防编辑器热重载与跨局残留）
         EnemyRegistry.Clear();
@@ -85,6 +100,10 @@ public class GameManager : MonoBehaviour
             MainHUD = FindAnyObjectByType<MainHUD>();
         if (LevelUpUI == null)
             LevelUpUI = FindAnyObjectByType<LevelUpUI>();
+        ShopUI = GetComponent<WaveShopUI>();
+        if (ShopUI == null) ShopUI = gameObject.AddComponent<WaveShopUI>();
+        TalentUI = GetComponent<TalentGraphUI>();
+        if (TalentUI == null) TalentUI = gameObject.AddComponent<TalentGraphUI>();
     }
 
     private void OnDestroy()
@@ -108,6 +127,8 @@ public class GameManager : MonoBehaviour
         }
         DifficultyManager?.Initialize(Player);
     }
+
+    private void OnApplicationQuit() => Progression?.Persist();
 
     private void Update()
     {
@@ -152,9 +173,11 @@ public class GameManager : MonoBehaviour
 
         if (GameOverUI != null)
             GameOverUI.gameObject.SetActive(newState == EGameState.GameOver);
+        ShopUI?.SetVisible(newState == EGameState.Shop);
+        if (newState != EGameState.MainMenu) TalentUI?.SetVisible(false);
 
         // 时间缩放
-        if (newState == EGameState.MainMenu || newState == EGameState.Paused || newState == EGameState.LevelUp || newState == EGameState.GameOver)
+        if (newState == EGameState.MainMenu || newState == EGameState.Paused || newState == EGameState.LevelUp || newState == EGameState.GameOver || newState == EGameState.Shop)
         {
             Time.timeScale = 0f;
         }
@@ -171,9 +194,11 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void StartGame()
     {
+        if (CurrentState != EGameState.MainMenu) return;
         ResetPlayer();
         ResetGameState();
         MonsterSpawner?.ResetSpawner();
+        BeginRun();
         DifficultyManager?.ResetSession();
         SetState(EGameState.Playing);
         MainHUD?.Rebind();
@@ -195,6 +220,11 @@ public class GameManager : MonoBehaviour
     public void ResumeGame()
     {
         if (CurrentState != EGameState.Paused && CurrentState != EGameState.LevelUp) return;
+        if (_pendingLevelUps > 0)
+        {
+            TryShowNextLevelUp();
+            return;
+        }
         SetState(EGameState.Playing);
     }
 
@@ -203,10 +233,13 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void RestartGame()
     {
+        if (CurrentState == EGameState.MainMenu) return;
+        SettleRun();
         ResetWorld();
         ResetGameState();
         ResetPlayer();
         DifficultyManager?.ResetSession();
+        BeginRun();
         SetState(EGameState.Playing);
         MainHUD?.Rebind();
         WaveManager?.StartGame();
@@ -217,6 +250,7 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void ReturnToMainMenu()
     {
+        SettleRun();
         ResetWorld();
         ResetGameState();
         ResetPlayer();
@@ -228,6 +262,10 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void GameOver()
     {
+        if (CurrentState == EGameState.MainMenu || CurrentState == EGameState.GameOver) return;
+        SettleRun();
+        _pendingLevelUps = 0;
+        LevelUpUI?.Hide();
         SetState(EGameState.GameOver);
 
         if (GameOverUI != null)
@@ -242,7 +280,9 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void OnPlayerLevelUp()
     {
+        if (CurrentState == EGameState.MainMenu || CurrentState == EGameState.GameOver) return;
         _pendingLevelUps++;
+        if (CurrentState != EGameState.Playing) return;
         TryShowNextLevelUp();
     }
 
@@ -278,6 +318,7 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void OnUpgradeSelected()
     {
+        if (CurrentState != EGameState.LevelUp || _pendingLevelUps <= 0) return;
         if (_pendingLevelUps > 0)
             _pendingLevelUps--;
         TryShowNextLevelUp();
@@ -338,12 +379,52 @@ public class GameManager : MonoBehaviour
 
     // === 内部方法 ===
 
+    public void AddGold(int amount)
+    {
+        if (amount <= 0) return;
+        Gold += amount;
+        OnGoldChanged?.Invoke(Gold);
+    }
+
+    public void OpenWaveShop()
+    {
+        if (CurrentState != EGameState.Playing) return;
+        _completedWaves++;
+        HealingPurchased = false;
+        SetState(EGameState.Shop);
+    }
+
+    public bool BuyHealing()
+    {
+        var stats = Player?.StatsComponent;
+        int price = Mathf.Max(1, HealingCost);
+        if (CurrentState != EGameState.Shop || HealingPurchased || Gold < price || stats == null ||
+            stats.CurrentHP <= 0f || stats.CurrentHP >= stats.GetEffectiveMaxHP()) return false;
+        Gold -= price;
+        HealingPurchased = true;
+        stats.Heal(Mathf.Max(1f, HealingAmount));
+        OnGoldChanged?.Invoke(Gold);
+        return true;
+    }
+
+    public void ContinueFromShop()
+    {
+        if (CurrentState != EGameState.Shop) return;
+        SetState(EGameState.Playing);
+        WaveManager?.StartNextWave();
+        if (_pendingLevelUps > 0) TryShowNextLevelUp();
+    }
+
     private void ResetGameState()
     {
         TotalKills = 0;
         GamePlayTime = 0f;
+        _completedWaves = 0;
         _pendingLevelUps = 0;
         LevelUpUI?.Hide();
+        Gold = 0;
+        HealingPurchased = false;
+        OnGoldChanged?.Invoke(Gold);
     }
 
     private void ResetWorld()
@@ -363,7 +444,22 @@ public class GameManager : MonoBehaviour
         var enemyProjectiles = FindObjectsByType<EnemyProjectile>(FindObjectsSortMode.None);
         foreach (var proj in enemyProjectiles)
         {
+            proj.gameObject.SetActive(false);
             Destroy(proj.gameObject);
+        }
+
+        // 重开/返回菜单时回收上一局的魔法弹，并清除火焰粒子。
+        foreach (var proj in FindObjectsByType<MagicBulletProjectile>())
+            MagicBulletWeapon.Pool.Release(proj.gameObject);
+        foreach (var proj in FindObjectsByType<FlameProjectile>())
+        {
+            proj.gameObject.SetActive(false);
+            Destroy(proj.gameObject);
+        }
+        foreach (var popup in FindObjectsByType<DamagePopupBehavior>())
+        {
+            popup.gameObject.SetActive(false);
+            Destroy(popup.gameObject);
         }
 
         // 重置波次
@@ -379,7 +475,10 @@ public class GameManager : MonoBehaviour
         foreach (var weapon in Player.EquippedWeapons)
         {
             if (weapon != null)
+            {
+                weapon.gameObject.SetActive(false);
                 Destroy(weapon.gameObject);
+            }
         }
         Player.EquippedWeapons.Clear();
 
@@ -398,6 +497,7 @@ public class GameManager : MonoBehaviour
 
         // 重置属性
         var stats = Player.StatsComponent;
+        stats.SetTalentBonuses(Progression.GetBonuses());
         stats.FlatHPBonus = 0f;
         stats.PercentHPBonus = 0f;
         stats.GlobalDamageMultiplier = 0f;
@@ -413,5 +513,14 @@ public class GameManager : MonoBehaviour
 
         // 重新生成初始武器
         Player.SpawnStartingWeapon();
+    }
+
+    private void BeginRun() => _runId = System.Guid.NewGuid().ToString("N");
+
+    private void SettleRun()
+    {
+        if (_runId == null) return;
+        Progression.SettleRun(_runId, TotalKills, GamePlayTime, _completedWaves);
+        _runId = null;
     }
 }

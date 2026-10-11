@@ -70,6 +70,7 @@ public class OrbitProjectile : MonoBehaviour
 
     private void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         // 更新角度
         _currentAngle += _speed * Time.deltaTime;
         if (_currentAngle >= 360f) _currentAngle -= 360f;
@@ -91,6 +92,7 @@ public class OrbitProjectile : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         if (_attackCooldown > 0f) return;
 
         if (other.TryGetComponent<Enemy>(out var enemy))

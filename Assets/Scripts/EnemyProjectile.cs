@@ -32,6 +32,12 @@ public class EnemyProjectile : MonoBehaviour
 
     private void CreateVisual()
     {
+        if (DungeonArt.CreateActor(transform, "imp_idle_anim_f", "imp_idle_anim_f", 0.45f,
+            new Color(1f, 0.5f, 0.5f), -0.15f))
+        {
+            GetComponent<Renderer>().enabled = false;
+            return;
+        }
         // 核心：暗红色
         VisualHelper.CreateVisual(PrimitiveType.Sphere, transform, "Core",
             Vector3.zero, Vector3.one * 0.2f, new Color(0.8f, 0.1f, 0.1f));
@@ -43,6 +49,7 @@ public class EnemyProjectile : MonoBehaviour
 
     private void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         transform.position += Direction * Speed * Time.deltaTime;
     }
 
@@ -72,6 +79,8 @@ public class EnemyProjectile : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        if (!gameObject.activeInHierarchy || GameManager.Instance == null ||
+            GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         if (other.TryGetComponent<PlayerController>(out var player))
         {
             player.StatsComponent.TakeDamage(Damage);

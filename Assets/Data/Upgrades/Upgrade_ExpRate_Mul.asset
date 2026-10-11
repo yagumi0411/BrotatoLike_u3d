@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UpgradeOption
   Type: 6
   Name: "\u9886\u609F"
-  Description: "+15% \u7ECF\u9A8C\u83B7\u53D6"
-  Value: 15
+  Description: "+10% \u7ECF\u9A8C\u83B7\u53D6"
+  Value: 10
   WeaponDef: {fileID: 0}
   MinLevelToAppear: 1

@@ -1,0 +1,478 @@
+{
+  "Version": 1,
+  "Id": "core.mage.start",
+  "Name": "法师 · 初始片区",
+  "StartNodeId": "core.mage.origin",
+  "Rules": {
+    "FirstPointXP": 10,
+    "PointCostLinear": 4,
+    "PointCostQuadratic": 1,
+    "MaxPointXP": 250,
+    "MinimumRunXP": 10,
+    "MinimumCombatSeconds": 15,
+    "KillsPerXP": 5,
+    "SecondsPerXP": 15,
+    "XPPerCompletedWave": 3
+  },
+  "Nodes": [
+    {
+      "Id": "core.mage.origin",
+      "Name": "法师起点",
+      "Description": "从这里向外探索。相邻节点投入第1点即可继续延伸。",
+      "Branch": "origin",
+      "Position": {
+        "x": 0,
+        "y": 0
+      },
+      "MaxRank": 1,
+      "Notable": true,
+      "Effects": []
+    },
+    {
+      "Id": "core.mage.damage.entry",
+      "Name": "法术基础",
+      "Description": "每级：全局伤害 +3%。",
+      "Branch": "damage",
+      "Position": {
+        "x": -120,
+        "y": 45.5
+      },
+      "MaxRank": 3,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.damage",
+          "Value": 0.03
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.damage.upper",
+      "Name": "奥术研习",
+      "Description": "每级：全局伤害 +3%。",
+      "Branch": "damage",
+      "Position": {
+        "x": -245,
+        "y": 84
+      },
+      "MaxRank": 2,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.damage",
+          "Value": 0.03
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.damage.lower",
+      "Name": "法术凝聚",
+      "Description": "每级：全局伤害 +3%。",
+      "Branch": "damage",
+      "Position": {
+        "x": -220,
+        "y": -24.5
+      },
+      "MaxRank": 2,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.damage",
+          "Value": 0.03
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.damage.notable",
+      "Name": "奥术掌握",
+      "Description": "全局伤害 +6%，暴击率 +2%。",
+      "Branch": "damage",
+      "Position": {
+        "x": -365,
+        "y": 38.5
+      },
+      "MaxRank": 1,
+      "Notable": true,
+      "Effects": [
+        {
+          "Id": "core.damage",
+          "Value": 0.06
+        },
+        {
+          "Id": "core.crit",
+          "Value": 0.02
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.damage.crit",
+      "Name": "精准施法",
+      "Description": "每级：暴击率 +1%。",
+      "Branch": "damage",
+      "Position": {
+        "x": -365,
+        "y": 136.5
+      },
+      "MaxRank": 2,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.crit",
+          "Value": 0.01
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.range.entry",
+      "Name": "法术延展",
+      "Description": "每级：武器作用距离 +3%。\n影响索敌距离、魔法弹飞行距离、火焰长度与环绕半径。",
+      "Branch": "range",
+      "Position": {
+        "x": 55,
+        "y": 80.5
+      },
+      "MaxRank": 3,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.range",
+          "Value": 0.03
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.range.left",
+      "Name": "广域施法",
+      "Description": "每级：武器作用距离 +3%。",
+      "Branch": "range",
+      "Position": {
+        "x": -30,
+        "y": 168
+      },
+      "MaxRank": 2,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.range",
+          "Value": 0.03
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.range.right",
+      "Name": "灵能感知",
+      "Description": "每级：经验拾取半径 +0.2。",
+      "Branch": "range",
+      "Position": {
+        "x": 175,
+        "y": 147
+      },
+      "MaxRank": 2,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.pickup",
+          "Value": 0.2
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.range.notable",
+      "Name": "广域掌握",
+      "Description": "武器作用距离 +5%，经验拾取半径 +0.3。",
+      "Branch": "range",
+      "Position": {
+        "x": 85,
+        "y": 244.99999999999997
+      },
+      "MaxRank": 1,
+      "Notable": true,
+      "Effects": [
+        {
+          "Id": "core.range",
+          "Value": 0.05
+        },
+        {
+          "Id": "core.pickup",
+          "Value": 0.3
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.range.outer",
+      "Name": "远域感应",
+      "Description": "每级：武器作用距离 +2.5%。",
+      "Branch": "range",
+      "Position": {
+        "x": 235,
+        "y": 244.99999999999997
+      },
+      "MaxRank": 2,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.range",
+          "Value": 0.025
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.survival.entry",
+      "Name": "体魄基础",
+      "Description": "每级：最大生命 +1。",
+      "Branch": "survival",
+      "Position": {
+        "x": 105,
+        "y": -70
+      },
+      "MaxRank": 3,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.max_hp",
+          "Value": 1
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.survival.upper",
+      "Name": "坚韧体魄",
+      "Description": "每级：最大生命 +1。",
+      "Branch": "survival",
+      "Position": {
+        "x": 240,
+        "y": -59.49999999999999
+      },
+      "MaxRank": 2,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.max_hp",
+          "Value": 1
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.survival.lower",
+      "Name": "法力护体",
+      "Description": "每级：受到的伤害降低 1.5%。",
+      "Branch": "survival",
+      "Position": {
+        "x": 80,
+        "y": -168
+      },
+      "MaxRank": 2,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.reduction",
+          "Value": 0.015
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.survival.notable",
+      "Name": "坚韧掌握",
+      "Description": "最大生命 +2，受到的伤害降低 2.5%。",
+      "Branch": "survival",
+      "Position": {
+        "x": 250,
+        "y": -182
+      },
+      "MaxRank": 1,
+      "Notable": true,
+      "Effects": [
+        {
+          "Id": "core.max_hp",
+          "Value": 2
+        },
+        {
+          "Id": "core.reduction",
+          "Value": 0.025
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.survival.outer",
+      "Name": "生命储备",
+      "Description": "每级：最大生命 +1。",
+      "Branch": "survival",
+      "Position": {
+        "x": 370,
+        "y": -112
+      },
+      "MaxRank": 2,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.max_hp",
+          "Value": 1
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.bridge.damage_range",
+      "Name": "奥术延伸",
+      "Description": "全局伤害 +2%，武器作用距离 +2%。",
+      "Branch": "bridge",
+      "Position": {
+        "x": -160,
+        "y": 182
+      },
+      "MaxRank": 1,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.damage",
+          "Value": 0.02
+        },
+        {
+          "Id": "core.range",
+          "Value": 0.02
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.bridge.range_life",
+      "Name": "灵能体魄",
+      "Description": "武器作用距离 +2%，最大生命 +1。",
+      "Branch": "bridge",
+      "Position": {
+        "x": 300,
+        "y": 70
+      },
+      "MaxRank": 1,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.range",
+          "Value": 0.02
+        },
+        {
+          "Id": "core.max_hp",
+          "Value": 1
+        }
+      ]
+    },
+    {
+      "Id": "core.mage.bridge.life_damage",
+      "Name": "战斗体魄",
+      "Description": "全局伤害 +2%，最大生命 +1。",
+      "Branch": "bridge",
+      "Position": {
+        "x": -120,
+        "y": -133
+      },
+      "MaxRank": 1,
+      "Notable": false,
+      "Effects": [
+        {
+          "Id": "core.damage",
+          "Value": 0.02
+        },
+        {
+          "Id": "core.max_hp",
+          "Value": 1
+        }
+      ]
+    }
+  ],
+  "Links": [
+    {
+      "From": "core.mage.origin",
+      "To": "core.mage.damage.entry"
+    },
+    {
+      "From": "core.mage.damage.entry",
+      "To": "core.mage.damage.upper"
+    },
+    {
+      "From": "core.mage.damage.entry",
+      "To": "core.mage.damage.lower"
+    },
+    {
+      "From": "core.mage.damage.upper",
+      "To": "core.mage.damage.notable"
+    },
+    {
+      "From": "core.mage.damage.lower",
+      "To": "core.mage.damage.notable"
+    },
+    {
+      "From": "core.mage.damage.notable",
+      "To": "core.mage.damage.crit"
+    },
+    {
+      "From": "core.mage.origin",
+      "To": "core.mage.range.entry"
+    },
+    {
+      "From": "core.mage.range.entry",
+      "To": "core.mage.range.left"
+    },
+    {
+      "From": "core.mage.range.entry",
+      "To": "core.mage.range.right"
+    },
+    {
+      "From": "core.mage.range.left",
+      "To": "core.mage.range.notable"
+    },
+    {
+      "From": "core.mage.range.right",
+      "To": "core.mage.range.notable"
+    },
+    {
+      "From": "core.mage.range.notable",
+      "To": "core.mage.range.outer"
+    },
+    {
+      "From": "core.mage.origin",
+      "To": "core.mage.survival.entry"
+    },
+    {
+      "From": "core.mage.survival.entry",
+      "To": "core.mage.survival.upper"
+    },
+    {
+      "From": "core.mage.survival.entry",
+      "To": "core.mage.survival.lower"
+    },
+    {
+      "From": "core.mage.survival.upper",
+      "To": "core.mage.survival.notable"
+    },
+    {
+      "From": "core.mage.survival.lower",
+      "To": "core.mage.survival.notable"
+    },
+    {
+      "From": "core.mage.survival.notable",
+      "To": "core.mage.survival.outer"
+    },
+    {
+      "From": "core.mage.damage.upper",
+      "To": "core.mage.bridge.damage_range"
+    },
+    {
+      "From": "core.mage.bridge.damage_range",
+      "To": "core.mage.range.left"
+    },
+    {
+      "From": "core.mage.range.right",
+      "To": "core.mage.bridge.range_life"
+    },
+    {
+      "From": "core.mage.bridge.range_life",
+      "To": "core.mage.survival.upper"
+    },
+    {
+      "From": "core.mage.survival.lower",
+      "To": "core.mage.bridge.life_damage"
+    },
+    {
+      "From": "core.mage.bridge.life_damage",
+      "To": "core.mage.damage.lower"
+    }
+  ]
+}

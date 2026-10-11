@@ -4,8 +4,8 @@ using System;
 public class PlayerStatsComponent : MonoBehaviour
 {
     [Header("基础属性")]
-    public float BaseMaxHP = 10f;
-    public float BaseMoveSpeed = 6f;
+    public float BaseMaxHP = 14f;
+    public float BaseMoveSpeed = 5f;
     public float BasePickupRadius = 3f;
 
     [Header("升级累加值")]
@@ -24,6 +24,11 @@ public class PlayerStatsComponent : MonoBehaviour
     public float CurrentXP;
     public int CurrentLevel = 1;
 
+    private TalentBonuses _talents = new TalentBonuses();
+
+    public void SetTalentBonuses(TalentBonuses bonuses) => _talents = bonuses ?? new TalentBonuses();
+    public float GetEffectiveWeaponRangeMultiplier() => Mathf.Max(0.1f, 1f + _talents.WeaponRange);
+
     // 事件
     public event Action<float, float> OnHPChanged;
     public event Action<float, float, int> OnXPChanged;
@@ -39,16 +44,16 @@ public class PlayerStatsComponent : MonoBehaviour
     }
 
     public float GetEffectiveMaxHP() =>
-        (BaseMaxHP + FlatHPBonus) * (1f + PercentHPBonus);
+        (BaseMaxHP + FlatHPBonus + _talents.MaxHP) * (1f + PercentHPBonus);
 
     public float GetEffectiveMoveSpeed() =>
         BaseMoveSpeed + FlatMoveSpeedBonus;
 
     public float GetEffectivePickupRadius() =>
-        BasePickupRadius + FlatPickupRangeBonus;
+        BasePickupRadius + FlatPickupRangeBonus + _talents.PickupRadius;
 
     public float GetEffectiveDamageMultiplier() =>
-        1f + GlobalDamageMultiplier;
+        1f + GlobalDamageMultiplier + _talents.Damage;
 
     public float GetEffectiveAttackSpeedMultiplier() =>
         1f + GlobalAttackSpeedMultiplier;
@@ -57,12 +62,16 @@ public class PlayerStatsComponent : MonoBehaviour
         1f + ExpGainMultiplier;
 
     public float GetEffectiveCritChance() =>
-        Mathf.Clamp(CritChanceBonus, 0f, 0.6f);
+        Mathf.Clamp(CritChanceBonus + _talents.CritChance, 0f, 0.6f);
 
     public float GetEffectiveCritDamage() =>
         1.5f + CritDamageMultiplierBonus;
 
-    public float GetXPToNextLevel() => 8 * (CurrentLevel + 1);
+    public float GetXPToNextLevel()
+    {
+        int growth = Mathf.Max(0, CurrentLevel - 1);
+        return 24f + 14f * growth + 3f * growth * growth;
+    }
 
     public void AddXP(float amount)
     {
@@ -83,8 +92,10 @@ public class PlayerStatsComponent : MonoBehaviour
 
     public void TakeDamage(float damage)
     {
-        damage = Mathf.Max(0f, damage);
-        CurrentHP -= damage;
+        if (CurrentHP <= 0f || (GameManager.Instance != null &&
+            GameManager.Instance.CurrentState != GameManager.EGameState.Playing)) return;
+        damage = Mathf.Max(0f, damage) * (1f - Mathf.Clamp(_talents.DamageReduction, 0f, 0.75f));
+        CurrentHP = Mathf.Max(0f, CurrentHP - damage);
         OnDamageTaken?.Invoke(damage);
         OnHPChanged?.Invoke(CurrentHP, GetEffectiveMaxHP());
 
@@ -92,6 +103,13 @@ public class PlayerStatsComponent : MonoBehaviour
         {
             OnDeath?.Invoke();
         }
+    }
+
+    public void Heal(float amount)
+    {
+        if (CurrentHP <= 0f || amount <= 0f) return;
+        CurrentHP = Mathf.Min(GetEffectiveMaxHP(), CurrentHP + amount);
+        OnHPChanged?.Invoke(CurrentHP, GetEffectiveMaxHP());
     }
 
     public void ApplyUpgrade(UpgradeOption option)
@@ -122,7 +140,7 @@ public class PlayerStatsComponent : MonoBehaviour
                 FlatPickupRangeBonus += option.Value;
                 break;
             case EUpgradeType.CritChance_Add:
-                CritChanceBonus += option.Value;
+                CritChanceBonus += option.Value / 100f;
                 break;
             case EUpgradeType.CritDamage_Mul:
                 CritDamageMultiplierBonus += option.Value / 100f;

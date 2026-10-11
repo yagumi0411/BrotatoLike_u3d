@@ -18,6 +18,7 @@ public abstract class Weapon : MonoBehaviour
 
     protected virtual void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         AttackCooldown -= Time.deltaTime;
         if (CanAttack())
         {
@@ -97,7 +98,7 @@ public abstract class Weapon : MonoBehaviour
     protected float GetEffectiveAttackInterval() =>
         WeaponDef.AttackInterval / OwnerPlayer.StatsComponent.GetEffectiveAttackSpeedMultiplier();
 
-    protected float GetEffectiveRange() => WeaponDef.Range;
+    protected float GetEffectiveRange() => WeaponDef.Range * OwnerPlayer.StatsComponent.GetEffectiveWeaponRangeMultiplier();
 
     protected float CalculateDamage() =>
         WeaponDef.BaseDamage * OwnerPlayer.StatsComponent.GetEffectiveDamageMultiplier();

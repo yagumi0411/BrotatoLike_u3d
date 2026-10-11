@@ -13,6 +13,7 @@ public class ShadowMageEnemy : Enemy
 
     protected override void Update()
     {
+        if (GameManager.Instance == null || GameManager.Instance.CurrentState != GameManager.EGameState.Playing) return;
         base.Update();
 
         if (EnemyDef.bIsRanged)

@@ -1,0 +1,13 @@
+0x72 DungeonTileset II v1.7
+Author: Robert / 0x72; palette recoloring credited by author to GrafxKid.
+Official source: https://0x72.itch.io/dungeontileset-ii
+Downloaded from the official free download on 2026-10-11.
+Asset license: Creative Commons Zero v1.0 Universal (CC0).
+License: https://creativecommons.org/publicdomain/zero/1.0/
+
+DungeonTileset.png is the original 0x72_DungeonTilesetII_v1.7.png.
+Tiles.txt is the original tile_list_v1.7 (renamed for Unity TextAsset import).
+Sprites are sliced at runtime from the author's coordinates. Tint, scaling,
+billboarding and idle/run animation are applied in game; artwork is unchanged.
+Enemy art mapping: Slime=tiny_slug; Skeleton=skelet; Bat=imp;
+ShadowMage=necromancer; Ghost=angel. These are visual substitutes, not new enemy mechanics.
