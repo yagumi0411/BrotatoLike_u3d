@@ -50,7 +50,7 @@ public class WaveShopUI : MonoBehaviour
         _status.text =
             $"第 {_manager.WaveManager.CurrentWave} 波结束    " +
             $"金币：{_manager.Gold}    " +
-            $"生命：{stats.CurrentHP:0.#} / {maxHP:0.#}";
+            $"生命：{Mathf.Ceil(stats.CurrentHP)} / {Mathf.Ceil(maxHP)}";
 
         _purchase.interactable =
             !_manager.HealingPurchased &&

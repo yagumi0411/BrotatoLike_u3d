@@ -110,3 +110,19 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# Local caches, recovery scenes, backups and generated outputs
+__pycache__/
+*.py[cod]
+/Assets/_Recovery/
+/Assets/_Recovery.meta
+/Backups/
+/Outputs/
+/.claude/
+/LOCAL_ENVIRONMENT.md
+
+# Personal thesis and interview materials (kept locally)
+/Docs/2026届毕业论文（设计）模板/
+/Docs/论文初稿/
+/Docs/InterviewPreparation.md
+/tools/create_thesis_draft.py

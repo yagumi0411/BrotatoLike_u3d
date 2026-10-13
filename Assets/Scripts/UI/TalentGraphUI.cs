@@ -46,9 +46,7 @@ public class TalentGraphUI : MonoBehaviour
         _font = names != null && names.Length > 0 && names[0] != null ? names[0].font : TMP_Settings.defaultFontAsset;
         if (_manager.MainMenuUI != null)
         {
-            var parent = _manager.MainMenuUI.transform;
-            MakeButton(parent, "OpenTalents", new Vector2(0, -150), new Vector2(210, 48), "天赋图", () => SetVisible(true));
-            _menuStatus = Label(parent, "MetaProgressionStatus", new Vector2(0, -220), new Vector2(700, 80), 20);
+            _menuStatus = _manager.MainMenuUI.MetaProgressionStatus;
         }
         _progression.OnChanged += Refresh;
         Refresh();
@@ -77,7 +75,8 @@ public class TalentGraphUI : MonoBehaviour
         canvas.renderMode = RenderMode.ScreenSpaceOverlay; canvas.sortingOrder = 3100;
         var scaler = _root.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1280, 720); scaler.matchWidthOrHeight = 0.5f;
+        scaler.referenceResolution = new Vector2(1280, 720);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
         var backdrop = Rect("Backdrop", _root.transform, Vector2.zero, Vector2.zero);
         backdrop.anchorMin = Vector2.zero; backdrop.anchorMax = Vector2.one;
         backdrop.offsetMin = backdrop.offsetMax = Vector2.zero;

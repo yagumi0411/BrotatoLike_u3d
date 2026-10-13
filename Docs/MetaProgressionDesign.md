@@ -1,6 +1,6 @@
 # 局外成长与法师天赋图
 
-更新日期：2026-10-11。首个片区已实现，武器特色与外围片区留待后续扩展。
+更新日期：2026-10-12。首个片区已实现，武器特色与外围片区留待后续扩展。
 
 ## 当前规则
 
@@ -89,10 +89,11 @@
 
 ## 验证
 
-通过 `Temp/GameLoopVerificationProject` 隔离场景及独立 companyName/productName 验证，不读取或修改正式游戏进度。
+以下记录来自 2026-10-11 的实现验证，本次文档同步未重新运行游戏测试。通过 `Temp/GameLoopVerificationProject` 隔离场景及独立 companyName/productName 验证，不读取或修改正式游戏进度。
 
 - 原 57 项游戏闭环检查在接入局外成长后继续通过。
 - 53 项天赋专项检查通过，涵盖相邻解锁、跨路线连接、多级上限、完整点满、免费重置、磁盘恢复、当前及历史结算去重、三种结束路径、真实属性、内容扩展、缺失内容恢复、无效内容拒绝及实际 UI 渲染。
 - 主工程全部相关运行时代码编译通过：0 错误，4 条既有过时 API 警告。
 - 可复用专项脚本：`tools/verification/MetaProgressionVerification.cs`。
 - 最终结果：`Logs/MetaProgressionVerification.txt`。
+- Logs 和 Temp 被 Git 忽略，报告及隔离项目不随克隆分发；专项脚本保存在仓库 tools 中，运行前需准备隔离项目并调整本机 Root 路径。

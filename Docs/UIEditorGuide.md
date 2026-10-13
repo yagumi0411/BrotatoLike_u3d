@@ -14,7 +14,7 @@
 | 购买和悬停事件 | WaveShopUI.Awake |
 | 继续按钮事件 | Inspector 中的 Button.On Click |
 
-商店不再由代码创建 Canvas、Image、文字或商品卡片。Awake 添加 EventTrigger 仅用于交互事件，不生成视觉布局。天赋图等其他界面仍沿用各自实现，不因为本次迁移一并改造。
+商店不再由代码创建 Canvas、Image、文字或商品卡片。Awake 添加 EventTrigger 仅用于交互事件，不生成视觉布局。主菜单天赋入口的迁移见第 7 节；天赋图内部仍沿用运行时生成方式。
 
 ## 2. 层级与布局
 
@@ -118,3 +118,24 @@ PurchaseButton.On Click 留空，由 Awake 注册 PurchaseHealing。ContinueButt
 菜单 `Tools > Pixel Dungeon UI > Preview Shop` 可快速进入商店。旧批量入口 PixelDungeonShopPreview.Run 仍使用 PurchaseHealing、ContinueWave、WaveShopCanvas 等旧对象名称，尚未适配手工布局，不作为新版验证命令。旧截图和历史 PASS 只对应当时版本。
 
 编辑与保存要退出 Play Mode；Scene 透视或辅助网格不用于判断最终 UI 效果，以 Game 窗口为准。按钮贴边时计算控件上下边与父边框的内边距，而不是只确认控件没有超出父矩形。
+
+## 7. 主菜单天赋入口迁移（编辑器接线待完成）
+
+脚本已停止生成主菜单的 OpenTalents 和 MetaProgressionStatus，改为使用 MainMenuUI 的 Inspector 引用。场景未由脚本修改，必须在退出 Play 模式后完成以下步骤，天赋入口才会显示。
+
+1. 在 Canvas/MainMenuPanel 下创建 UI > Button - TextMeshPro，命名 OpenTalents；子文字改为“天赋图”。可复制 StartButton 保留字体和样式，但应清空复制得到的 Button.On Click。
+2. 在同一父对象下创建 UI > Text - TextMeshPro，命名 MetaProgressionStatus。字体使用现有支持中文的 TMP Font Asset，编辑态文字可填写“天赋进度”。
+3. 两个根对象 Anchor Min、Anchor Max、Pivot 均为 (0.5, 0.5)，Rotation=(0,0,0)、Scale=(1,1,1)、Pos Z=0。按下表设置。
+
+| 对象 | Pos X / Y | Width / Height |
+|---|---|---|
+| OpenTalents | 0 / -150 | 210 / 48 |
+| MetaProgressionStatus | 0 / -245 | 700 / 130 |
+
+统计区域比旧版本增加高度，容纳两行进度、上局奖励以及可能出现的存档提示。位置基于 1280 × 720 预览、现有 Constant Pixel Size Canvas，以及上一轮主菜单布局；其他预览尺寸需另行检查。
+
+4. OpenTalents 子文字 Rect Transform 横纵拉伸，Left/Right=8、Top/Bottom=4。两个 TMP 组件字号均为 20，关闭 Auto Size，水平 Center、垂直 Middle，Margins 四项为 0，关闭文字 Raycast Target。按钮自身 Image 保留 Raycast Target。
+5. 选中 MainMenuPanel，在 MainMenuUI 中，将 OpenTalents 拖给 Open Talents Button，将 MetaProgressionStatus 拖给 Meta Progression Status。OpenTalents 的 On Click 留空，由 MainMenuUI.Awake 注册事件。
+6. 保存场景，进入 Play：确认没有重复控件、统计正常更新，天赋图能打开并返回；开始游戏后主菜单控件随面板隐藏，再返回主菜单后正常显示。
+
+位置、字体、颜色和尺寸均由编辑器维护；MainMenuUI 处理入口点击，TalentGraphUI.Refresh 更新统计内容。缺失引用时 MainMenuUI 会报告接线错误，不再生成替代控件。
